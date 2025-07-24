@@ -1,0 +1,120 @@
+<?xml version='1.0' encoding='us-ascii'?>
+<calibration FileName="E:\QTM_Projects\IntoTheWild\Data\ITW014_ITW014\Running - Markerless\Running trial Markerless 4.qtm">
+    <CaptureStart Date="2025-05-24" Time="11:08:27.601" Timestamp="54904.41114403" />
+    <Channels />
+    <ForcePlates />
+    <cameras>
+        <camera active="1" calibrated="true" message="" point-count="1090" avg-residual="0.878626" serial="25770" model="Miqus Hybrid" viewrotation="0" video_resolution="1080p">
+            <fov_marker left="0" top="0" right="1919" bottom="1087" />
+            <fov_marker_max left="0" top="0" right="1919" bottom="1087" />
+            <fov_video left="0" top="0" right="1919" bottom="1087" />
+            <fov_video_max left="0" top="0" right="1919" bottom="1087" />
+            <transform x="-1876.443359" y="-3905.754639" z="1589.352783" r11="0.999953" r12="0.005799" r13="0.007732" r21="-0.008750" r22="0.203283" r23="0.979081" r31="0.004106" r32="-0.979103" r33="0.203324" />
+            <intrinsic focallength="9.286411" sensorMinU="0.000000" sensorMaxU="122879.000000" sensorMinV="0.000000" sensorMaxV="69631.000000" focalLengthU="108060.531250" focalLengthV="108059.585938" centerPointU="61842.535156" centerPointV="33367.882812" skew="0.000000" radialDistortion1="-0.052807" radialDistortion2="0.134178" radialDistortion3="0.000000" tangentalDistortion1="-0.000349" tangentalDistortion2="-0.000142" />
+        </camera>
+        <camera active="1" calibrated="true" message="" point-count="1100" avg-residual="1.057388" serial="26076" model="Miqus Hybrid" viewrotation="0" video_resolution="1080p">
+            <fov_marker left="0" top="0" right="1919" bottom="1087" />
+            <fov_marker_max left="0" top="0" right="1919" bottom="1087" />
+            <fov_video left="0" top="0" right="1919" bottom="1087" />
+            <fov_video_max left="0" top="0" right="1919" bottom="1087" />
+            <transform x="1208.048828" y="-3960.214844" z="1621.405640" r11="0.999726" r12="0.020997" r13="-0.010383" r21="0.005855" r22="0.205189" r23="0.978705" r31="0.022680" r32="-0.978497" r33="0.205010" />
+            <intrinsic focallength="9.289105" sensorMinU="0.000000" sensorMaxU="122879.000000" sensorMinV="0.000000" sensorMaxV="69631.000000" focalLengthU="108089.296875" focalLengthV="108093.507812" centerPointU="60363.921875" centerPointV="33103.601562" skew="0.000000" radialDistortion1="-0.052971" radialDistortion2="0.136134" radialDistortion3="0.000000" tangentalDistortion1="0.000576" tangentalDistortion2="-0.000743" />
+        </camera>
+        <camera active="1" calibrated="true" message="" point-count="1459" avg-residual="1.343496" serial="26071" model="Miqus Hybrid" viewrotation="0" video_resolution="1080p">
+            <fov_marker left="0" top="0" right="1919" bottom="1087" />
+            <fov_marker_max left="0" top="0" right="1919" bottom="1087" />
+            <fov_video left="0" top="0" right="1919" bottom="1087" />
+            <fov_video_max left="0" top="0" right="1919" bottom="1087" />
+            <transform x="9440.674805" y="-4090.779785" z="1706.351074" r11="0.622419" r12="0.782652" r13="0.007128" r21="-0.131027" r22="0.095214" r23="0.986796" r31="0.771639" r32="-0.615134" r33="0.161812" />
+            <intrinsic focallength="9.304725" sensorMinU="0.000000" sensorMaxU="122879.000000" sensorMinV="0.000000" sensorMaxV="69631.000000" focalLengthU="108275.773438" focalLengthV="108270.539062" centerPointU="60413.636719" centerPointV="33421.222656" skew="0.000000" radialDistortion1="-0.051539" radialDistortion2="0.138230" radialDistortion3="0.000000" tangentalDistortion1="0.000414" tangentalDistortion2="0.000503" />
+        </camera>
+        <camera active="1" calibrated="true" message="" point-count="2101" avg-residual="0.919952" serial="26079" model="Miqus Hybrid" viewrotation="0" video_resolution="1080p">
+            <fov_marker left="0" top="0" right="1919" bottom="1087" />
+            <fov_marker_max left="0" top="0" right="1919" bottom="1087" />
+            <fov_video left="0" top="0" right="1919" bottom="1087" />
+            <fov_video_max left="0" top="0" right="1919" bottom="1087" />
+            <transform x="-7912.172852" y="3740.508789" z="1591.626587" r11="-0.427562" r12="-0.903864" r13="-0.014856" r21="0.129519" r22="-0.077515" r23="0.988542" r31="-0.894659" r32="0.420739" r33="0.150210" />
+            <intrinsic focallength="9.282210" sensorMinU="0.000000" sensorMaxU="122879.000000" sensorMinV="0.000000" sensorMaxV="69631.000000" focalLengthU="108003.320312" focalLengthV="108019.015625" centerPointU="60159.343750" centerPointV="35478.562500" skew="0.000000" radialDistortion1="-0.048351" radialDistortion2="0.130319" radialDistortion3="0.000000" tangentalDistortion1="0.000134" tangentalDistortion2="0.000374" />
+        </camera>
+        <camera active="1" calibrated="true" message="" point-count="791" avg-residual="1.271985" serial="26153" model="Miqus Video" viewrotation="0" video_resolution="1080p">
+            <fov_marker left="0" top="0" right="1919" bottom="1087" />
+            <fov_marker_max left="0" top="0" right="1919" bottom="1087" />
+            <fov_video left="0" top="0" right="1919" bottom="1087" />
+            <fov_video_max left="0" top="0" right="1919" bottom="1087" />
+            <transform x="7184.640625" y="6401.478027" z="1664.600220" r11="-0.865586" r12="0.498832" r13="0.043907" r21="-0.007315" r22="-0.100268" r23="0.994934" r31="0.500708" r32="0.860879" r33="0.090439" />
+            <intrinsic focallength="9.232572" sensorMinU="0.000000" sensorMaxU="122879.000000" sensorMinV="0.000000" sensorMaxV="69631.000000" focalLengthU="107440.156250" focalLengthV="107426.953125" centerPointU="60076.859375" centerPointV="35053.089844" skew="0.000000" radialDistortion1="-0.048026" radialDistortion2="0.139099" radialDistortion3="0.000000" tangentalDistortion1="0.000966" tangentalDistortion2="0.000274" />
+        </camera>
+        <camera active="1" calibrated="true" message="" point-count="1162" avg-residual="1.307131" serial="25769" model="Miqus Hybrid" viewrotation="0" video_resolution="1080p">
+            <fov_marker left="0" top="0" right="1919" bottom="1087" />
+            <fov_marker_max left="0" top="0" right="1919" bottom="1087" />
+            <fov_video left="0" top="0" right="1919" bottom="1087" />
+            <fov_video_max left="0" top="0" right="1919" bottom="1087" />
+            <transform x="-9973.459961" y="-4032.386475" z="1582.513062" r11="0.536726" r12="-0.843492" r13="0.021121" r21="0.089317" r22="0.081689" r23="0.992648" r31="-0.839016" r32="-0.530894" r33="0.119183" />
+            <intrinsic focallength="9.259421" sensorMinU="0.000000" sensorMaxU="122879.000000" sensorMinV="0.000000" sensorMaxV="69631.000000" focalLengthU="107747.734375" focalLengthV="107744.250000" centerPointU="60572.199219" centerPointV="34062.863281" skew="0.000000" radialDistortion1="-0.049076" radialDistortion2="0.131563" radialDistortion3="0.000000" tangentalDistortion1="0.000006" tangentalDistortion2="-0.000480" />
+        </camera>
+        <camera active="1" calibrated="true" message="" point-count="1743" avg-residual="0.989597" serial="26080" model="Miqus Hybrid" viewrotation="0" video_resolution="1080p">
+            <fov_marker left="0" top="0" right="1919" bottom="1087" />
+            <fov_marker_max left="0" top="0" right="1919" bottom="1087" />
+            <fov_video left="0" top="0" right="1919" bottom="1087" />
+            <fov_video_max left="0" top="0" right="1919" bottom="1087" />
+            <transform x="-4839.411621" y="-3957.534668" z="1605.850952" r11="0.888537" r12="-0.458674" r13="0.010952" r21="0.089210" r22="0.196132" r23="0.976511" r31="-0.450049" r32="-0.866689" r33="0.215189" />
+            <intrinsic focallength="9.272938" sensorMinU="0.000000" sensorMaxU="122879.000000" sensorMinV="0.000000" sensorMaxV="69631.000000" focalLengthU="107898.101562" focalLengthV="107908.453125" centerPointU="61947.972656" centerPointV="35484.828125" skew="0.000000" radialDistortion1="-0.052104" radialDistortion2="0.134401" radialDistortion3="0.000000" tangentalDistortion1="0.000199" tangentalDistortion2="0.000448" />
+        </camera>
+        <camera active="1" calibrated="true" message="" point-count="1312" avg-residual="1.013714" serial="26072" model="Miqus Hybrid" viewrotation="0" video_resolution="1080p">
+            <fov_marker left="0" top="0" right="1919" bottom="1087" />
+            <fov_marker_max left="0" top="0" right="1919" bottom="1087" />
+            <fov_video left="0" top="0" right="1919" bottom="1087" />
+            <fov_video_max left="0" top="0" right="1919" bottom="1087" />
+            <transform x="-2081.998779" y="6695.895020" z="1630.133057" r11="-0.996535" r12="-0.078741" r13="-0.026810" r21="-0.022460" r22="-0.055622" r23="0.998199" r31="-0.080090" r32="0.995342" r33="0.053660" />
+            <intrinsic focallength="9.246687" sensorMinU="0.000000" sensorMaxU="122879.000000" sensorMinV="0.000000" sensorMaxV="69631.000000" focalLengthU="107598.484375" focalLengthV="107597.140625" centerPointU="59867.003906" centerPointV="35005.132812" skew="0.000000" radialDistortion1="-0.051782" radialDistortion2="0.131173" radialDistortion3="0.000000" tangentalDistortion1="0.000509" tangentalDistortion2="0.000042" />
+        </camera>
+        <camera active="1" calibrated="true" message="" point-count="1641" avg-residual="1.078695" serial="26074" model="Miqus Hybrid" viewrotation="0" video_resolution="1080p">
+            <fov_marker left="0" top="0" right="1919" bottom="1087" />
+            <fov_marker_max left="0" top="0" right="1919" bottom="1087" />
+            <fov_video left="0" top="0" right="1919" bottom="1087" />
+            <fov_video_max left="0" top="0" right="1919" bottom="1087" />
+            <transform x="-5041.340332" y="6645.776855" z="1622.411255" r11="-0.865428" r12="-0.500835" r13="-0.014084" r21="0.026553" r22="-0.073916" r23="0.996911" r31="-0.500329" r32="0.862381" r33="0.077268" />
+            <intrinsic focallength="9.271882" sensorMinU="0.000000" sensorMaxU="122879.000000" sensorMinV="0.000000" sensorMaxV="69631.000000" focalLengthU="107889.929688" focalLengthV="107892.039062" centerPointU="62036.914062" centerPointV="33350.968750" skew="0.000000" radialDistortion1="-0.049357" radialDistortion2="0.132200" radialDistortion3="0.000000" tangentalDistortion1="-0.000540" tangentalDistortion2="-0.000349" />
+        </camera>
+        <camera active="1" calibrated="true" message="" point-count="1513" avg-residual="1.143037" serial="26077" model="Miqus Hybrid" viewrotation="0" video_resolution="1080p">
+            <fov_marker left="0" top="0" right="1919" bottom="1087" />
+            <fov_marker_max left="0" top="0" right="1919" bottom="1087" />
+            <fov_video left="0" top="0" right="1919" bottom="1087" />
+            <fov_video_max left="0" top="0" right="1919" bottom="1087" />
+            <transform x="969.930603" y="6702.986328" z="1629.137329" r11="-0.998684" r12="-0.050161" r13="-0.010648" r21="-0.008034" r22="-0.052024" r23="0.998614" r31="-0.050645" r32="0.997385" r33="0.051553" />
+            <intrinsic focallength="9.288418" sensorMinU="0.000000" sensorMaxU="122879.000000" sensorMinV="0.000000" sensorMaxV="69631.000000" focalLengthU="108070.632812" focalLengthV="108096.164062" centerPointU="59121.789062" centerPointV="34026.964844" skew="0.000000" radialDistortion1="-0.050516" radialDistortion2="0.136514" radialDistortion3="0.000000" tangentalDistortion1="-0.000238" tangentalDistortion2="0.000135" />
+        </camera>
+        <camera active="1" calibrated="true" message="" point-count="913" avg-residual="0.942195" serial="26073" model="Miqus Hybrid" viewrotation="0" video_resolution="1080p">
+            <fov_marker left="0" top="0" right="1919" bottom="1087" />
+            <fov_marker_max left="0" top="0" right="1919" bottom="1087" />
+            <fov_video left="0" top="0" right="1919" bottom="1087" />
+            <fov_video_max left="0" top="0" right="1919" bottom="1087" />
+            <transform x="3849.547119" y="6617.263672" z="1622.897095" r11="-0.999984" r12="0.004816" r13="0.002947" r21="0.002676" r22="-0.055287" r23="0.998467" r31="0.004972" r32="0.998459" r33="0.055274" />
+            <intrinsic focallength="9.268790" sensorMinU="0.000000" sensorMaxU="122879.000000" sensorMinV="0.000000" sensorMaxV="69631.000000" focalLengthU="107847.109375" focalLengthV="107862.914062" centerPointU="61688.421875" centerPointV="33955.496094" skew="0.000000" radialDistortion1="-0.051755" radialDistortion2="0.135721" radialDistortion3="0.000000" tangentalDistortion1="-0.000102" tangentalDistortion2="0.000416" />
+        </camera>
+        <camera active="1" calibrated="true" message="" point-count="1272" avg-residual="1.323846" serial="26075" model="Miqus Hybrid" viewrotation="0" video_resolution="1080p">
+            <fov_marker left="0" top="0" right="1919" bottom="1087" />
+            <fov_marker_max left="0" top="0" right="1919" bottom="1087" />
+            <fov_video left="0" top="0" right="1919" bottom="1087" />
+            <fov_video_max left="0" top="0" right="1919" bottom="1087" />
+            <transform x="9767.573242" y="3211.166016" z="1626.598999" r11="-0.422646" r12="0.905822" r13="-0.029273" r21="-0.229306" r22="-0.075631" r23="0.970412" r31="0.876806" r32="0.416853" r33="0.239676" />
+            <intrinsic focallength="9.271549" sensorMinU="0.000000" sensorMaxU="122879.000000" sensorMinV="0.000000" sensorMaxV="69631.000000" focalLengthU="107882.125000" focalLengthV="107892.109375" centerPointU="60165.816406" centerPointV="36075.242188" skew="0.000000" radialDistortion1="-0.051256" radialDistortion2="0.132754" radialDistortion3="0.000000" tangentalDistortion1="0.000111" tangentalDistortion2="-0.000810" />
+        </camera>
+        <camera active="1" calibrated="true" message="" point-count="1135" avg-residual="1.366050" serial="26078" model="Miqus Hybrid" viewrotation="0" video_resolution="1080p">
+            <fov_marker left="0" top="0" right="1919" bottom="1087" />
+            <fov_marker_max left="0" top="0" right="1919" bottom="1087" />
+            <fov_video left="0" top="0" right="1919" bottom="1087" />
+            <fov_video_max left="0" top="0" right="1919" bottom="1087" />
+            <transform x="6926.628906" y="-3949.808105" z="1621.653442" r11="0.842693" r12="0.538389" r13="-0.002398" r21="-0.099388" r22="0.159938" r23="0.982111" r31="0.529141" r32="-0.827380" r33="0.188288" />
+            <intrinsic focallength="9.300514" sensorMinU="0.000000" sensorMaxU="122879.000000" sensorMinV="0.000000" sensorMaxV="69631.000000" focalLengthU="108218.421875" focalLengthV="108229.898438" centerPointU="59104.492188" centerPointV="34382.109375" skew="0.000000" radialDistortion1="-0.051148" radialDistortion2="0.134512" radialDistortion3="0.000000" tangentalDistortion1="0.000367" tangentalDistortion2="-0.000828" />
+        </camera>
+        <camera active="1" calibrated="true" message="" point-count="574" avg-residual="0.974382" serial="26154" model="Miqus Video" viewrotation="0" video_resolution="1080p">
+            <fov_marker left="0" top="0" right="1919" bottom="1087" />
+            <fov_marker_max left="0" top="0" right="1919" bottom="1087" />
+            <fov_video left="0" top="0" right="1919" bottom="1087" />
+            <fov_video_max left="0" top="0" right="1919" bottom="1087" />
+            <transform x="4163.364746" y="-3943.199463" z="1604.036743" r11="0.999868" r12="0.015695" r13="-0.004195" r21="0.000822" r22="0.209029" r23="0.977909" r31="0.016225" r32="-0.977784" r33="0.208988" />
+            <intrinsic focallength="9.250045" sensorMinU="0.000000" sensorMaxU="122879.000000" sensorMinV="0.000000" sensorMaxV="69631.000000" focalLengthU="107631.796875" focalLengthV="107641.960938" centerPointU="63014.382812" centerPointV="33834.308594" skew="0.000000" radialDistortion1="-0.045731" radialDistortion2="0.136708" radialDistortion3="0.000000" tangentalDistortion1="-0.000525" tangentalDistortion2="0.000502" />
+        </camera>
+    </cameras>
+</calibration>

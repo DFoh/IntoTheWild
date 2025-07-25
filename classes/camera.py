@@ -69,6 +69,53 @@ class CameraCalibrationInfo:
         cam_info.fov = FOV.from_xml_element(cam_xml.find('fov_video_max'))
         return cam_info
 
+    def pixel_to_camera_ray(self, x_pixel: float, y_pixel: float, ray_length: float = 10000) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Calculates a 3D ray in world coordinates from a 2D pixel coordinate.
+
+        Args:
+            x_pixel: The x-coordinate of the pixel in the image frame.
+            y_pixel: The y-coordinate of the pixel in the image frame.
+            ray_length: The desired length of the ray in world units.
+
+        Returns:
+            A tuple containing the ray's start point and end point in the
+            global coordinate system.
+        """
+        # 1. Get the camera's calibration data from self
+        pos = self.transform.translation
+        R = self.transform.rotation
+        intr = self.intrinsics
+        fov = self.fov
+
+        # 2. Map image pixel to sensor units
+        # Note: Assumes pixel coords are relative to a [0, 0] top-left origin.
+        u = x_pixel / fov.right * (intr.sensor_max_u - intr.sensor_min_u) + intr.sensor_min_u
+        v = y_pixel / fov.bottom * (intr.sensor_max_v - intr.sensor_min_v) + intr.sensor_min_v
+
+        # 3. Un-project to get the direction vector in camera's "Optical" coordinate system
+        K = np.array([
+            [intr.focal_length_u, intr.skew, intr.center_point_u],
+            [0, intr.focal_length_v, intr.center_point_v],
+            [0, 0, 1]
+        ])
+        K_inv = np.linalg.inv(K)
+        d_cam = K_inv @ np.array([u, v, 1.0])
+
+        # 4. Flip coordinate system to match the calibration file's "View" system
+        flip_matrix = np.diag([1, -1, -1])  # 180° rotation around X-axis
+        d_cam_flipped = flip_matrix @ d_cam
+
+        # 5. Normalize the direction vector and transform it to the world frame
+        d_cam_normalized = d_cam_flipped / np.linalg.norm(d_cam_flipped)
+        d_world = R.T @ d_cam_normalized
+
+        # 6. Calculate start and end points of the ray
+        start_point = pos
+        end_point = pos + d_world * ray_length
+
+        return start_point, end_point
+
 
 class FOV:
     def __init__(self, top: int, bottom: int, left: int, right: int):

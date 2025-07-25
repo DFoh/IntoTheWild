@@ -154,49 +154,11 @@ def add_camera_calibration(fig: go.Figure, path_calibration_file: Path):
 
 
 def add_camera_ray(fig: go.Figure,
-                   camera: CameraCalibrationInfo,
-                   pixel_x: int,
-                   pixel_y: int,
-                   ray_length: int = 20000,
+                   start_point: np.ndarray,
+                   end_point: np.ndarray,
                    ray_color: str = 'cyan',
                    ray_title: str = 'Camera Ray',
                    show_ray_title: bool = False):
-    """
-    Add a camera ray to the 3D plot based on the camera's calibration information and pixel coordinates.
-    :param fig: 3D scene figure to which the camera ray will be added.
-    :param camera: CameraInformation object containing camera calibration data.
-    :param pixel_x: Object location in the camera image along the x-axis (horizontal).
-    :param pixel_y: Object location in the camera image along the y-axis (vertical).
-    :param ray_length: Length of the ray in the 3D space.
-    :param ray_color: Color of the ray in the plot.
-    """
-    # 1. Get camera parameters
-    pos = camera.transform.translation
-    rot = camera.transform.rotation
-    intr = camera.intrinsics
-
-    # 2. Un-project the 2D pixel to a 3D direction vector in camera coordinates
-    pixel_u = pixel_x / camera.fov.right * (intr.sensor_max_u - intr.sensor_min_u) + intr.sensor_min_u
-    pixel_v = pixel_y / camera.fov.bottom * (intr.sensor_max_v - intr.sensor_min_v) + intr.sensor_min_v
-    d_cam = np.array([
-        (pixel_u - intr.sensor_min_u) / (intr.sensor_max_u - intr.sensor_min_u) * 2 - 1.0,  # x
-        (pixel_v - intr.sensor_min_v) / (intr.sensor_max_v - intr.sensor_min_v) * 2 - 1.0,  # y
-        -1.0
-    ])
-
-    # 3. Normalize the direction vector to make it a unit vector
-    d_cam_normalized = d_cam / np.linalg.norm(d_cam)
-
-    # 4. Transform the direction vector from camera to world coordinates
-    # The 'rot' matrix transforms from world-to-camera, so we use its transpose
-    # to rotate the camera's direction vector into the world frame.
-    d_world = rot.T @ d_cam_normalized
-
-    # 5. Calculate the start and end points of the ray in world coordinates
-    start_point = pos
-    end_point = pos + d_world * ray_length
-
-    # 6. Add the ray as a line trace to the figure
     fig.add_trace(go.Scatter3d(
         x=[start_point[0], end_point[0]],
         y=[start_point[1], end_point[1]],
@@ -220,11 +182,14 @@ if __name__ == '__main__':
     fig = plot_3d_space()
     add_camera_calibration(fig, path_cal_file)
 
-    cam = list_cam_infos[1]
-    pixel_x = int(3 / 4 * 1920)
-    pixel_y = int(3 / 4 * 1080)
-    add_camera_ray(camera=cam, fig=fig, pixel_x=960, pixel_y=540, ray_title="Center Ray", show_ray_title=True)
-    add_camera_ray(camera=cam, fig=fig, pixel_x=0, pixel_y=0, ray_title="Top Left Ray", show_ray_title=True)
-    add_camera_ray(camera=cam, fig=fig, pixel_x=1920, pixel_y=1080, ray_title="Top Right Ray", show_ray_title=True)
-    add_camera_ray(camera=cam, fig=fig, pixel_x=960, pixel_y=0, ray_title="Top Center Ray", show_ray_title=True)
+    cam = list_cam_infos[5]
+    # Define the corners and center to draw rays for
+    points_to_draw = [(x, y) for x in range(0, 5, 1) for y in range(0, 5, 1)]
+
+    for coords in points_to_draw:
+        # Use the new method on the camera object
+        start, end = cam.pixel_to_camera_ray(x_pixel=coords[0], y_pixel=coords[1], ray_length=10000)
+        # Add the returned ray to the plot
+        add_camera_ray(fig, start_point=start, end_point=end, ray_color='cyan', ray_title=f'Ray {coords}', show_ray_title=True)
+
     fig.show()

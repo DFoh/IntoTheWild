@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import numpy as np
@@ -171,25 +172,161 @@ def add_camera_ray(fig: go.Figure,
     ))
 
 
+def add_camera_rays_from_json(fig: go.Figure,
+                              cam_infos: list[CameraCalibrationInfo],
+                              selections: dict[str, tuple[int, int]],
+                              ray_len=ARROW_LEN):
+    # map cam serial/id to CameraCalibrationInfo
+    cam_map = {str(cam.serial): cam for cam in cam_infos}
+    rays = []
+
+    for cam_id, pix in selections.items():
+        if pix is None:
+            continue
+        px, py = pix
+        cam = cam_map.get(cam_id)
+        if cam is None:
+            print(f"Warning: no calibration for camera {cam_id}")
+            continue
+        # compute ray
+        start, end = cam.pixel_to_camera_ray(x_pixel=px, y_pixel=py, ray_length=ray_len)
+        # direction vector
+        v = end - start
+        rays.append((start, v))
+        # add to plot
+        fig.add_trace(go.Scatter3d(
+            x=[start[0], end[0]], y=[start[1], end[1]], z=[start[2], end[2]],
+            mode='lines', line=dict(color='cyan', width=3), name=f'Ray {cam_id}', hoverinfo='skip'
+        ))
+    if rays:
+        optimal = compute_optimal_point(rays)
+        fig.add_trace(go.Scatter3d(
+            x=[optimal[0]], y=[optimal[1]], z=[optimal[2]],
+            mode='markers', marker=dict(size=6, color='yellow'), name='Optimal Point'
+        ))
+
+
+def compute_distances(rays: list[tuple[np.ndarray, np.ndarray]], point: np.ndarray) -> np.ndarray:
+    """
+    Compute the distances from a point to a set of rays.
+    :param rays: List of tuples (point_on_line, direction_unit_vector).
+    :param point: The point to compute distances to.
+    :return: List of distances from the point to each ray.
+    """
+    distances = []
+    for p, v in rays:
+        v = v / np.linalg.norm(v)  # ensure direction is a unit vector
+        d = np.linalg.norm(point - p - np.dot(point - p, v) * v)
+        distances.append(d)
+    distances = np.array(distances)
+    distances.sort()
+    return distances
+
+
+def solve_optimal_point(rays: list[tuple[np.ndarray, np.ndarray]]) -> np.ndarray:
+    """
+    Solve for the optimal point that minimizes the distance to a set of rays.
+    :param rays: List of tuples (point_on_line, direction_unit_vector).
+    :return: The optimal point in 3D space.
+    """
+    A = np.zeros((3, 3))
+    b = np.zeros(3)
+    for p, v in rays:
+        v = v / np.linalg.norm(v)  # ensure direction is a unit vector
+        P = np.eye(3) - np.outer(v, v)
+        A += P
+        b += P.dot(p)
+    # Solve for x: A x = b
+    solution = np.linalg.solve(A, b)
+    return solution
+
+
+# Compute the closest point to a set of 3D lines (rays)
+def compute_optimal_point(rays: list[tuple[np.ndarray, np.ndarray]]) -> np.ndarray:
+    solution = solve_optimal_point(rays)
+    # compute the distance to each ray
+    distances = compute_distances(rays, solution)
+    # detect outliers:
+    if len(distances) > 2:
+        median_dist = np.median(distances)
+        outliers = distances[distances > 2 * median_dist]
+        if len(outliers) > 0:
+            print(f"Warning: {len(outliers)} outliers detected with distances: {outliers}")
+    else:
+        print("Warning: Not enough rays to compute optimal point reliably.")
+    # remove outliers from the rays
+    rays_updated = [r for r, d in zip(rays, distances) if d <= 2 * np.median(distances)]
+    # solve again without outliers
+    solution_updated = solve_optimal_point(rays_updated)
+    # get the new distances
+    updated_distances = compute_distances(rays_updated, solution_updated)
+    return solution_updated
+
+
+def main(dir_cal_file: Path, dir_json: Path):
+    # load calibration
+    if not dir_cal_file.exists():
+        raise FileNotFoundError(f"Calibration file missing: {dir_cal_file}")
+    cam_infos = get_camera_information_from_cal_file(dir_cal_file)
+
+    # load selections
+    if not dir_json.exists():
+        raise FileNotFoundError(f"Selections JSON missing: {dir_json}")
+    with open(dir_json) as jf:
+        selections = json.load(jf)
+
+    # build plot
+    fig = plot_3d_space()
+    add_camera_calibration(fig, dir_cal_file)
+
+    add_camera_rays_from_json(fig, cam_infos, selections, ray_len=15000)
+    fig.show()
+
+def plot_point_in_3d(fig: go.Figure, point: np.ndarray, name: str = 'Point', color: str = 'yellow'):
+    """
+    Plot a single point in 3D space.
+    :param fig: The Plotly figure to add the point to.
+    :param point: The 3D point to plot.
+    :param name: The name of the point for the legend.
+    :param color: The color of the point.
+    """
+    fig.add_trace(go.Scatter3d(
+        x=[point[0]], y=[point[1]], z=[point[2]],
+        mode='markers',
+        marker=dict(size=6, color=color),
+        name=name,
+        hoverinfo='name'
+    ))
+
 if __name__ == '__main__':
     # Use your provided file path
     # path_cal_file = Path("../data/20250710_105205.qca.txt")
     path_cal_file = Path("../data/cal.txt")
-    if path_cal_file.exists():
-        list_cam_infos = get_camera_information_from_cal_file(path_cal_file)
-    else:
-        raise FileNotFoundError(f"Calibration file not found: {path_cal_file}")
-    fig = plot_3d_space()
-    add_camera_calibration(fig, path_cal_file)
+    path_json = Path("../selected_points.json")
+    main(path_cal_file, path_json)
 
-    cam = list_cam_infos[5]
-    # Define the corners and center to draw rays for
-    points_to_draw = [(x, y) for x in range(0, 5, 1) for y in range(0, 5, 1)]
-
-    for coords in points_to_draw:
-        # Use the new method on the camera object
-        start, end = cam.pixel_to_camera_ray(x_pixel=coords[0], y_pixel=coords[1], ray_length=10000)
-        # Add the returned ray to the plot
-        add_camera_ray(fig, start_point=start, end_point=end, ray_color='cyan', ray_title=f'Ray {coords}', show_ray_title=True)
-
-    fig.show()
+    # if path_cal_file.exists():
+    #     list_cam_infos = get_camera_information_from_cal_file(path_cal_file)
+    # else:
+    #     raise FileNotFoundError(f"Calibration file not found: {path_cal_file}")
+    # fig = plot_3d_space()
+    # add_camera_calibration(fig, path_cal_file)
+    #
+    # cam = list_cam_infos[5]
+    # cam1 = list_cam_infos[6]
+    # start, end = cam.pixel_to_camera_ray(x_pixel=900, y_pixel=500, ray_length=10000)
+    # add_camera_ray(fig, start_point=start, end_point=end)
+    # start, end = cam1.pixel_to_camera_ray(x_pixel=900, y_pixel=500, ray_length=10000)
+    # add_camera_ray(fig, start_point=start, end_point=end)
+    # # add_camera_ray(fig, start_point=start, end_point=end, ray_color='red', ray_title='Cam1 Ray', show_ray_title=True)
+    # #
+    # # # Define the corners and center to draw rays for
+    # # points_to_draw = [(x, y) for x in range(0, 5, 1) for y in range(0, 5, 1)]
+    # #
+    # # for coords in points_to_draw:
+    # #     # Use the new method on the camera object
+    # #     start, end = cam.pixel_to_camera_ray(x_pixel=coords[0], y_pixel=coords[1], ray_length=10000)
+    # #     # Add the returned ray to the plot
+    # #     add_camera_ray(fig, start_point=start, end_point=end, ray_color='cyan', ray_title=f'Ray {coords}', show_ray_title=True)
+    # #
+    # fig.show()

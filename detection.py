@@ -1,15 +1,21 @@
+import ssl
+
 import cv2
 import easyocr
 import numpy as np
 from ultralytics import YOLO
 
+ssl._create_default_https_context = ssl._create_unverified_context
+
 
 def setup():
-    # --- SETUP --- #
     model = YOLO("yolov8n.pt")
-    # Ensure that easyocr is initialized with GPU=True if you have a compatible GPU,
-    # otherwise set it to False or remove the gpu argument.
-    reader = easyocr.Reader(['en'], gpu=True)
+    reader = easyocr.Reader(
+        ['en'],
+        gpu=True,
+        download_enabled=True,
+        model_storage_directory='./easyocr'
+    )
     return model, reader
 
 
@@ -66,6 +72,7 @@ def enhance_clock_crop(image):
 
     return sharpened
 
+
 def process_frame_ocr_only(frame, reader):
     processed_frame = frame.copy()
 
@@ -98,7 +105,9 @@ def process_frame_ocr_only(frame, reader):
     return processed_frame, ocr_result[0][1] if ocr_result else None
 
 
-def analyse_single_video(video_path: str, model: any, reader: any,
+def analyse_single_video(video_path: str,
+                         model: any,
+                         reader: any,
                          start_time_sec: int = 0,
                          analysis_duration_sec: int = -1):
     cap = cv2.VideoCapture(video_path)
@@ -227,21 +236,48 @@ def analyse_multiple_videos(videos: list, start_time_sec, analysis_duration_sec,
     cv2.destroyAllWindows()
 
 
+def human_detection_in_video(video_path: str, model: any, reader: any):
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        print(f"Error opening video file: {video_path}")
+        return
+
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        processed_frame = process_frame(frame, model, reader)
+        cv2.imshow("Detection + OCR", processed_frame)
+
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+
 if __name__ == '__main__':
     model, reader = setup()
 
-    video_path = "data/Running trial Markerless 4_Miqus_4_26079.avi"
+    video_path = r"data/video/25769.avi"
     # video_path = "data/Running trial Markerless 4_Miqus_6_25769.avi"
 
     # video_path = "data/Running trial Markerless 4_Miqus_12_26075.avi"
     # start_time_sec = 213  # <== set your desired start time here
     start_time_sec = 240  # <== set your desired start time here
     # start_time_sec = 280  # <== set your desired start time here
-    analysis_duration_sec = 2  # <== Analyze duration
+    # analysis_duration_sec = 2  # <== Analyze duration
 
-    analyse_single_video(video_path=video_path, model=model, reader=reader,
-                         start_time_sec=start_time_sec,
-                         analysis_duration_sec=analysis_duration_sec)
+    human_detection_in_video(video_path=video_path,
+                             model=model,
+                             reader=reader)
+
+    # analyse_single_video(video_path=video_path,
+    #                      model=model,
+    #                      reader=reader,
+    #                      start_time_sec=0,
+    #                      analysis_duration_sec=analysis_duration_sec)
 
     # video_path_1 = "data/Running trial Markerless 4_Miqus_12_26075.avi"
     # video_path_2 = "data/Running trial Markerless 4_Miqus_3_26071.avi"

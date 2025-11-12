@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pandas as pd
+
 start_numbers_heat_1 = [100, 166, 177, 185, 186, 213, 214, 218, 222, 224, 225, 231, 245, 311, 313, 318, 363]  # M1
 start_numbers_heat_2 = [15, 22, 182, 183, 187, 200, 211, 230, 258, 274, 277, 306, 315]  # F1
 start_numbers_heat_3 = [107, 170, 215, 221, 223, 227, 251, 280, 308, 309, 310, 360]  # M2
@@ -24,3 +26,7 @@ paths_videos = {
     "heat_3": path_heat_3,
     "heat_4": path_heat_4,
 }
+
+def get_participant_data() -> pd.DataFrame:
+    path_participant_data = Path("../data/into_the_wild_participant_data.xlsx")
+    return pd.read_excel(path_participant_data)

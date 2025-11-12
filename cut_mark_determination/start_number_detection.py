@@ -9,8 +9,8 @@ import pandas as pd
 from ultralytics import YOLO
 
 from cut_mark_determination.common import (make_empty_raw_number_dataframe,
-                                           save_numbers_dataframe_to_excel)
-from util import start_numbers_heat_3, paths_videos
+                                           save_numbers_dataframe_to_excel, get_heat_trials)
+from util import start_numbers
 
 # ssl._create_default_https_context = ssl._create_unverified_context
 
@@ -67,7 +67,8 @@ def hamming_distance(s1: str, s2: str) -> int:
 
 
 # --- Helper function to process a single frame ---
-def process_frame(frame, model, reader, frame_number, cam_id) -> tuple[np.array, pd.DataFrame | None]:
+def process_frame(frame, model, reader, frame_number, cam_id, start_numbers_heat) -> tuple[
+    np.array, pd.DataFrame | None]:
     """
     Processes a single video frame for person detection and OCR.
 
@@ -123,7 +124,7 @@ def process_frame(frame, model, reader, frame_number, cam_id) -> tuple[np.array,
                     continue
                 if not ttext.isdigit():
                     continue
-                hamming_distances = [hamming_distance(ttext, str(n)) for n in start_numbers_heat_3]
+                hamming_distances = [hamming_distance(ttext, str(n)) for n in start_numbers_heat]
                 if min(hamming_distances) > 0:
                     continue
                 # print(f"Hamming distances for OCR text '{ttext}': {hamming_distances}")
@@ -201,7 +202,9 @@ def process_frame_ocr_only(frame, reader):
     return processed_frame, ocr_result[0][1] if ocr_result else None
 
 
-def analyse_single_video(video_path: Path, show: bool = True):
+def analyse_single_video(video_path: Path,
+                         start_numbers_heat: list[int],
+                         show: bool = True):
     model, reader = setup()
     cap = cv2.VideoCapture(video_path.as_posix())
     cam_id = video_path.stem.split("_")[-1]
@@ -216,7 +219,8 @@ def analyse_single_video(video_path: Path, show: bool = True):
                                                           model,
                                                           reader,
                                                           frame_count,
-                                                          cam_id)
+                                                          cam_id,
+                                                          start_numbers_heat)
         if df_numbers_frame is not None:
             df_numbers_all = pd.concat([df_numbers_all, df_numbers_frame], ignore_index=True)
         if show:
@@ -351,14 +355,6 @@ def overlay_single_video(video_path: str, tracks_csv: str, out_path: str) -> dic
     return {"video": video_path, "frames": frames, "written": written, "status": "ok"}
 
 
-def get_heat_trials(heat: int):
-    path_heat_root = paths_videos[f"heat_{heat}"]
-    qtm_files = list(path_heat_root.glob("*trial Markerless*.qtm"))
-    # strip to only get the trial names
-    trial_names = [f.stem for f in qtm_files]
-    return trial_names
-
-
 def get_video_path_by_trial_name_and_camera_id(heat: int, trialname: str, cam_id: str) -> Path:
     path_heat_root = paths_videos[f"heat_{heat}"]
     path_video_file = list(path_heat_root.glob(f"{trialname}_Miqus_*_{cam_id}.avi"))
@@ -371,12 +367,15 @@ def main(heat: int):
     cam_id_front_right = "26075"
     cam_id_front_left = "26071"
     trial_names = get_heat_trials(heat)
+    start_numbers_heat = start_numbers[f"heat_{heat}"]
 
     for trial_name in trial_names:
         video_path_front_right = get_video_path_by_trial_name_and_camera_id(heat, trial_name, cam_id_front_right)
         video_path_front_left = get_video_path_by_trial_name_and_camera_id(heat, trial_name, cam_id_front_left)
-        df_start_number_detection_front_right = analyse_single_video(video_path=video_path_front_right)
-        df_start_number_detection_front_left = analyse_single_video(video_path=video_path_front_left)
+        df_start_number_detection_front_right = analyse_single_video(video_path=video_path_front_right,
+                                                                     start_numbers_heat=start_numbers_heat)
+        df_start_number_detection_front_left = analyse_single_video(video_path=video_path_front_left,
+                                                                    start_numbers_heat=start_numbers_heat)
         # merge dataframes
         df_numbers_all = pd.concat([df_start_number_detection_front_right,
                                     df_start_number_detection_front_left], ignore_index=True)

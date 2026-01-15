@@ -52,7 +52,7 @@ class ZoomPanSelect:
 
 
 def main():
-    video_dir = os.path.join('data', 'video')
+    video_dir = os.path.join('data')
     results = {}
 
     for fname in sorted(os.listdir(video_dir)):
@@ -61,7 +61,7 @@ def main():
         cam_id = os.path.splitext(fname)[0]
         path = os.path.join(video_dir, fname)
         cap = cv2.VideoCapture(path)
-        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+        cap.set(cv2.CAP_PROP_POS_FRAMES, 18*85)
         ret, frame = cap.read()
         cap.release()
         if not ret:

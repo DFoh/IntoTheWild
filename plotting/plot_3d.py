@@ -6,6 +6,9 @@ import plotly.graph_objects as go
 
 from classes.camera import CameraCalibrationInfo, get_camera_information_from_cal_file
 
+# TODO: DELETE THIS IMPORT
+import matplotlib.pyplot as plt
+
 ARROW_LEN = 1000  # length of orientation arrows in same units as positions
 
 
@@ -174,36 +177,54 @@ def add_camera_ray(fig: go.Figure,
 
 def add_camera_rays_from_json(fig: go.Figure,
                               cam_infos: list[CameraCalibrationInfo],
-                              selections: dict[str, tuple[int, int]],
+                              points: dict[str, tuple[int, int]],
                               ray_len=ARROW_LEN):
     # map cam serial/id to CameraCalibrationInfo
     cam_map = {str(cam.serial): cam for cam in cam_infos}
     rays = []
+    line_colors = ['cyan', 'magenta', 'yellow', 'orange', 'lime', 'pink', 'lightblue', 'lightgreen']
 
-    for cam_id, pix in selections.items():
-        if pix is None:
+
+    for cam_id, cam_points in points.items():
+        if cam_points is None:
             continue
-        px, py = pix
-        cam = cam_map.get(cam_id)
-        if cam is None:
-            print(f"Warning: no calibration for camera {cam_id}")
+        if len(cam_points) > 3:
             continue
-        # compute ray
-        start, end = cam.pixel_to_camera_ray(x_pixel=px, y_pixel=py, ray_length=ray_len)
-        # direction vector
-        v = end - start
-        rays.append((start, v))
-        # add to plot
-        fig.add_trace(go.Scatter3d(
-            x=[start[0], end[0]], y=[start[1], end[1]], z=[start[2], end[2]],
-            mode='lines', line=dict(color='cyan', width=3), name=f'Ray {cam_id}', hoverinfo='skip'
-        ))
-    if rays:
-        optimal = compute_optimal_point(rays)
-        fig.add_trace(go.Scatter3d(
-            x=[optimal[0]], y=[optimal[1]], z=[optimal[2]],
-            mode='markers', marker=dict(size=6, color='yellow'), name='Optimal Point'
-        ))
+        line_color = line_colors[hash(cam_id) % len(line_colors)]
+        for cam_point in cam_points:
+            cam = cam_map.get(cam_id)
+            px = cam_point["uv"][0]
+            py = cam_point["uv"][1]
+            if cam is None:
+                print(f"Warning: no calibration for camera {cam_id}")
+                continue
+            # compute ray
+            start, end = cam.pixel_to_camera_ray(x_pixel=px, y_pixel=py, ray_length=ray_len)
+            # direction vector
+            v = end - start
+            # rays.append((start, v))
+            rays.append((start, v, cam_id))
+
+            # add to plot
+            print(f"Adding ray: cam {cam_id}, pixel ({px}, {py}), start {start}, end {end}")
+            # add consistent color per camera
+
+            fig.add_trace(go.Scatter3d(
+                x=[start[0], end[0]], y=[start[1], end[1]], z=[start[2], end[2]],
+                mode='lines', line=dict(color=line_color, width=3), name=f'Ray {cam_id}', hoverinfo='skip'
+            ))
+    print(f"Added total of {len(rays)} rays from {len(points)} cameras.")
+    clusters = triangulate_clusters(rays, k=3, fig=fig)
+    # for c in clusters:
+    #     print(f"Adding cluster point at {c['point']} supported by cams {c['cams']}")
+    #     plot_point_in_3d(fig, c["point"], name=f'P ({len(c["cams"])} cams)')
+    # if rays:
+    #     optimal = compute_optimal_point(rays)
+    #     print(f"Adding optimal point computed at: {optimal}")
+    #     fig.add_trace(go.Scatter3d(
+    #         x=[optimal[0]], y=[optimal[1]], z=[optimal[2]],
+    #         mode='markers', marker=dict(size=6, color='yellow'), name='Optimal Point'
+    #     ))
 
 
 def compute_distances(rays: list[tuple[np.ndarray, np.ndarray]], point: np.ndarray) -> np.ndarray:
@@ -263,6 +284,14 @@ def compute_optimal_point(rays: list[tuple[np.ndarray, np.ndarray]]) -> np.ndarr
     return solution_updated
 
 
+def load_jsonl_line(path_jsonl, n):
+    with open(path_jsonl) as f:
+        for i, line in enumerate(f):
+            if i == n:
+                return json.loads(line)
+    return None  # out of range
+
+
 def main(dir_cal_file: Path, dir_json: Path):
     # load calibration
     if not dir_cal_file.exists():
@@ -272,15 +301,18 @@ def main(dir_cal_file: Path, dir_json: Path):
     # load selections
     if not dir_json.exists():
         raise FileNotFoundError(f"Selections JSON missing: {dir_json}")
-    with open(dir_json) as jf:
-        selections = json.load(jf)
+
+    line = load_jsonl_line(dir_json, 1190)
+    points = line['points']
 
     # build plot
     fig = plot_3d_space()
     add_camera_calibration(fig, dir_cal_file)
 
-    add_camera_rays_from_json(fig, cam_infos, selections, ray_len=15000)
+    add_camera_rays_from_json(fig, cam_infos, points, ray_len=15000)
     fig.show()
+    print("done")
+
 
 def plot_point_in_3d(fig: go.Figure, point: np.ndarray, name: str = 'Point', color: str = 'yellow'):
     """
@@ -298,11 +330,112 @@ def plot_point_in_3d(fig: go.Figure, point: np.ndarray, name: str = 'Point', col
         hoverinfo='name'
     ))
 
+
+# pp1=np.array([0,0,0])
+# vv1=np.array([1,0,0])
+# pp2=np.array([0,0,0])
+# vv2=np.array([0,1,0])
+# closest_point_between_lines(pp1, vv1, pp2, vv2)
+
+def closest_point_between_lines(p1, v1, p2, v2):
+    v1 = v1 / np.linalg.norm(v1)
+    v2 = v2 / np.linalg.norm(v2)
+    w0 = p1 - p2
+    a = v1 @ v1
+    b = v1 @ v2
+    c = v2 @ v2
+    d = v1 @ w0
+    e = v2 @ w0
+    D = a * c - b * b + 1e-9
+    s = (b * e - c * d) / D
+    t = (a * e - b * d) / D
+    c1 = p1 + s * v1
+    c2 = p2 + t * v2
+    mid = 0.5 * (c1 + c2)
+    err = np.linalg.norm(c1 - c2)
+    return mid, err
+
+
+def kmeans(P, k=3, iters=20):
+    C = P[np.random.choice(len(P), k, replace=False)]
+    for _ in range(iters):
+        D = np.linalg.norm(P[:, None, :] - C[None, :, :], axis=2)
+        a = D.argmin(1)
+        newC = np.array([P[a == i].mean(0) if np.any(a == i) else C[i] for i in range(k)])
+        if np.allclose(C, newC): break
+        C = newC
+    return C, a
+
+
+def triangulate_clusters(rays, k=3, pair_err_thresh=300.0, max_ray_length=10000.0, fig=None):
+    # rays: [(p, v, cam_id), ...]
+    cand = []
+    idx = []
+    for i, (p1, v1, c1) in enumerate(rays):
+        for j, (p2, v2, c2) in enumerate(rays):
+            if j <= i or c1 == c2: continue  # skip same ray (or smaller index) or same camera
+            mid, err = closest_point_between_lines(p1, v1, p2, v2)
+            if err > pair_err_thresh:
+                continue
+            l1 = np.linalg.norm(mid - p1)
+            l2 = np.linalg.norm(mid - p2)
+            if l1 > max_ray_length or l2 > max_ray_length:
+                continue
+            cand.append(mid)
+            idx.append((i, j))
+    if not cand: return []
+    P = np.vstack(cand)
+    C, a = kmeans(P, k=min(k, len(P)))
+
+    # TODO: DELETE!! EXPERIMENTAL
+    # print random sample points after candidates
+    # ax = plt.figure().add_subplot(projection='3d')
+
+    # randP = P[np.random.choice(len(P), min(80, len(P)), replace=False)]
+    for p in range(len(P)):
+        point = P[p]
+        # ax.scatter(point[0], point[1], point[2], color='cyan', s=20)
+        plot_point_in_3d(fig, point, name='Candidate Point', color='cyan')
+    # print all cluster centers
+    for c in range(len(C)):
+        cc = C[c]
+        plot_point_in_3d(fig, cc, name=f'Cluster Center {c}', color='red')
+        # ax.scatter(cc[0], cc[1], cc[2], color='red', s=100)
+    plt.show()
+    # END TODO
+
+    # refine per cluster with LS on assigned rays
+    out = []
+    for ci in range(len(C)):
+        pairs = [idx[m] for m in range(len(a)) if a[m] == ci]
+        used = set()
+        R = []
+        for i, j in pairs:
+            for rix in (i, j):
+                if rix not in used:
+                    R.append(rays[rix]);
+                    used.add(rix)
+        if len(R) >= 2:
+            p = solve_optimal_point([(p, v) for (p, v, _) in R])
+            out.append({"point": p,
+                        "cams": sorted({c for *_, c in R}),
+                        "n_rays": len(R)})
+    # sort by support
+    out.sort(key=lambda d: (d["n_rays"], len(d["cams"])), reverse=True)
+    return out[:k]
+
+
+def reconstruct(cam_rays: list, min_ray_count: int, min_ray_len_m: float, max_ray_len_m: float, max_residual: float):
+    pass
+
+
 if __name__ == '__main__':
     # Use your provided file path
     # path_cal_file = Path("../data/20250710_105205.qca.txt")
     path_cal_file = Path("../data/cal.txt")
-    path_json = Path("../selected_points.json")
+    # path_json = Path("../selected_points.json")
+
+    path_json = Path("../output_tracks/merged_tracking_output.jsonl")
     main(path_cal_file, path_json)
 
     # if path_cal_file.exists():

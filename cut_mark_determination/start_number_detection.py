@@ -9,8 +9,8 @@ import pandas as pd
 from ultralytics import YOLO
 
 from cut_mark_determination.common import (make_empty_raw_number_dataframe,
-                                           save_numbers_dataframe_to_excel, get_heat_trials)
-from util import start_numbers
+                                           save_numbers_dataframe_to_excel)
+from util import start_numbers, get_video_path_by_trial_name_and_camera_id, get_heat_trials
 
 # ssl._create_default_https_context = ssl._create_unverified_context
 
@@ -355,12 +355,7 @@ def overlay_single_video(video_path: str, tracks_csv: str, out_path: str) -> dic
     return {"video": video_path, "frames": frames, "written": written, "status": "ok"}
 
 
-def get_video_path_by_trial_name_and_camera_id(heat: int, trialname: str, cam_id: str) -> Path:
-    path_heat_root = paths_videos[f"heat_{heat}"]
-    path_video_file = list(path_heat_root.glob(f"{trialname}_Miqus_*_{cam_id}.avi"))
-    if len(path_video_file) != 1:
-        raise ValueError(f"Could not find unique video file for trial {trialname} and camera id {cam_id}")
-    return path_video_file[0]
+
 
 
 def main(heat: int):

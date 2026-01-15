@@ -3,16 +3,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from util import paths_videos
-
-
-def get_heat_trials(heat: int) -> list[str]:
-    path_heat_root = paths_videos[f"heat_{heat}"]
-    qtm_files = list(path_heat_root.glob("*trial Markerless*.qtm"))
-    # strip to only get the trial names
-    trial_names = [f.stem for f in qtm_files]
-    return trial_names
-
 
 def make_empty_raw_number_dataframe() -> pd.DataFrame:
     column_dtypes = {

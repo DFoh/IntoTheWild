@@ -4,8 +4,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from cut_mark_determination.common import load_final_frames_dataframe_from_excel, get_heat_trials
-from util import get_participant_data
+from cut_mark_determination.common import load_final_frames_dataframe_from_excel
+from util import get_participant_data, get_heat_trials
 
 
 def get_average_running_speed_mps(start_number: int, df_participants: pd.DataFrame) -> float | None:
@@ -25,7 +25,7 @@ def get_average_running_speed_mps(start_number: int, df_participants: pd.DataFra
 def main(heat: int):
     frame_rate = 85  # frames per second
     distance_after_final_frame_m = 2  # meters
-    distance_before_final_frame_m = 12  # meters (capture volume length + a little bit extra)
+    distance_before_final_frame_m = 15  # meters (capture volume length + a little bit extra)
     trial_names = get_heat_trials(heat)
     df_all = pd.DataFrame(
         columns=["start_number",

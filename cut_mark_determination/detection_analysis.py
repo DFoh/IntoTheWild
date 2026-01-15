@@ -7,8 +7,7 @@ from scipy.signal import find_peaks
 
 from cut_mark_determination.common import load_numbers_dataframe_from_excel, make_empty_final_frame_dataframe, \
     save_final_frames_dataframe_to_excel
-from cut_mark_determination.start_number_detection import get_heat_trials
-from util import start_numbers_heat_3
+from util import start_numbers_heat_3, get_heat_trials
 
 
 def post_process_number_detection():

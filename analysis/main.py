@@ -1,0 +1,305 @@
+import sys
+import warnings
+from pathlib import Path, PureWindowsPath
+
+import numpy as np
+import pandas as pd
+from scipy.io import loadmat
+from scipy.signal import find_peaks
+import matplotlib.pyplot as plt
+import matplotlib
+import seaborn as sns
+
+from analysis.util import PATH_ROOT, load_events_from_excel, load_result_dataframe, make_file_path, safe_event_dataframe, safe_result_dataframe
+from gait_events import get_running_events
+
+
+def get_valid_frame_range(data, side: str):
+    # ISSUE: the data will have NaN values at the start and end because the skeleton is not solved in the first and last frames.
+    # SOLUTION: check the data for the first and last valid frame and only analyze this window.
+    # also: save the first frame to later offset the detected events to the actual frame number in the original file.
+    # This is important for later comparison with the force platform data.
+
+    heel_pos_data = data[f"{side}_Heel_Pos"][0][0]
+    toe_pos_data = data[f"{side}_Toe_Pos"][0][0]
+    mask = ~np.isnan(heel_pos_data[:, 0]) & ~np.isnan(toe_pos_data[:, 0])
+    valid_indices = np.where(mask)[0]
+    first_valid_frame = valid_indices[0]
+    last_valid_frame = valid_indices[-1]
+
+    return first_valid_frame, last_valid_frame
+
+
+def get_events(mat_file) -> dict | None:
+    data = loadmat(mat_file)
+    try:
+        events = get_running_events(data)
+    except Exception as e:
+        warnings.warn(f"Exception {e} in {mat_file}")
+        events = None
+    if (events is not None) and (len(events) == 0):
+        warnings.warn(f"No events detected in {mat_file}")
+        events = None
+    return events
+
+
+def calc_events(path_data_root: Path, heats: list, laps: list) -> pd.DataFrame:
+    rows = []
+    for heat in heats:
+        path_mat = path_data_root / heat
+        bib_numbers = [d.name for d in path_mat.iterdir() if d.is_dir()]
+        bib_numbers.sort()
+        print(bib_numbers)
+        for bib_number in bib_numbers:
+            print(f"Processing Heat {heat}, Bib {bib_number}...")
+            mat_files = list((path_mat / bib_number).glob("*filt.mat"))
+            lap_file_dict = {int(f.stem.split("_")[2]): f for f in mat_files}
+            for lap_no, mat_file in lap_file_dict.items():
+                print(f"Processing lap {lap_no} from file {mat_file.name}...")
+                events = get_events(mat_file)
+                rows.append({"Heat": heat, "Bib": bib_number, "Lap": lap_no, "Events": events})
+    df_events = pd.DataFrame(rows)
+    # sort by heat, bib, lap
+    df_events.sort_values(by=["Heat", "Bib", "Lap"], inplace=True)
+    # reindex the dataframe
+    df_events.reset_index(drop=True, inplace=True)
+    # set the dtype of "Bib" to int
+    df_events["Bib"] = df_events["Bib"].astype(int)
+    return df_events
+
+
+def calc_running_speed(data) -> np.float64 | None:
+    frame_rate_hz = data['FRAME_RATE'][0][0][0][0]
+    try:
+        pelvis_com_pos = data['Pelvis_COM_Position'][0][0]
+    except KeyError as e:
+        warnings.warn(f"Pelvis_COM_Position not found")
+        return None
+    # anterior-posterior position of the pelvis COM
+    pelvis_com_ap_pos = pelvis_com_pos[:, 0]
+    # anterior-posterior velocity of the pelvis COM in m/s:
+    pelvis_com_ap_vel_ms = np.gradient(pelvis_com_ap_pos) * frame_rate_hz
+    # take the median of the velocity (to be robust against outliers) as the running speed for this lap
+    running_speed_ms = np.nanmedian(pelvis_com_ap_vel_ms)
+    return running_speed_ms
+
+
+def time_normalize_signal(signal: np.ndarray, new_length: int) -> np.ndarray:
+    """
+    Time-normalize a signal to a new length using linear interpolation.
+    signal: 1D array of shape (N,)
+    new_length: int, the desired length of the time-normalized signal
+    returns: 1D array of shape (new_length,)
+    """
+    original_length = len(signal)
+    if original_length == 0:
+        return np.full(new_length, np.nan)  # return NaNs if the input signal is empty
+    original_time = np.linspace(0, 1, original_length)
+    new_time = np.linspace(0, 1, new_length)
+    normalized_signal = np.interp(new_time, original_time, signal)
+    return normalized_signal
+
+
+def calc_vertical_pelvis_movement_sided(data, events, side) -> float:
+    pelvis_com_vert_pos = data['Pelvis_COM_Position'][0][0][:, 2]
+    if events is None or side not in events:
+        warnings.warn(f"No events found.")
+        return np.nan
+    ics = events.get(side).get("IC", [])
+    ics_contralateral = events.get("Right" if side == "Left" else "Left").get("IC", []).copy()
+    if len(ics) == 0 or len(ics_contralateral) == 0:
+        warnings.warn(f"No initial contact events found for {side} side or contralateral side.")
+        return np.nan
+    print(ics_contralateral)
+    while ics[0] > ics_contralateral[0]:
+        ics_contralateral.pop(0)  # remove the first contralateral IC if it occurs before the first ipsilateral IC
+    print(ics_contralateral)
+
+    amplitude = []
+    for ic, ic_contralateral in zip(ics, ics_contralateral):
+        if ic_contralateral - ic < 20:  # if the contralateral IC is too close to the ipsilateral IC, skip this step (probably a detection error)
+            warnings.warn(f"Contralateral IC at frame {ic_contralateral} is too close to ipsilateral IC at frame {ic}, skipping this step.")
+            continue
+        step_pelv_motion = pelvis_com_vert_pos[ic:ic_contralateral]
+        # plt.plot(step_pelv_motion)
+        amplitude.append(np.ptp(step_pelv_motion))
+    # return in cm just for convenience
+    return np.mean(amplitude) * 100 if len(amplitude) > 0 else np.nan
+
+
+def calc_max_knee_flexion(data, events, side: str) -> float:
+    knee_flexion = data[f'{side}_Knee_Angles'][0][0][:, 0]
+    if events is None or side not in events:
+        warnings.warn(f"No events found.")
+        return np.nan
+    evts = events.get(side)
+    max_flex = []
+    for ic, to in zip(evts["IC"], evts["TO"]):
+        stride_knee_flexion = knee_flexion[ic:to]
+        max_flex.append(np.max(stride_knee_flexion))
+
+    return np.mean(max_flex) if len(max_flex) > 0 else np.nan
+
+
+def calc_overstriding(data, events, side: str, parameter: str) -> float:
+    if events is None or side not in events:
+        warnings.warn(f"No events found.")
+        return np.nan
+    hip_center_traj = data[f'{side}_Hip_Center'][0][0]
+    knee_center_traj = data[f'{side}_Knee_Center'][0][0]
+    if side == "Right":
+        ankle_center_traj = data[f'Rightt_Ankle_Center'][0][0]  # screw you past-dom!
+    else:
+        ankle_center_traj = data[f'{side}_Ankle_Center'][0][0]
+    # choose positive values
+    hip_ankle_ap_diff = ankle_center_traj[:, 0] - hip_center_traj[:, 0]
+    knee_ankle_ap_diff = ankle_center_traj[:, 0] - knee_center_traj[:, 0]
+    evts = events.get(side)
+    # variables according to Lieberman et al., 2015 "Effects of stride frequency..." doi:10.1242/jeb.125500
+    overstriding_oh = []
+    overstriding_ok = []
+    for ic in evts["IC"]:
+        overstriding_oh.append(hip_ankle_ap_diff[ic])
+        overstriding_ok.append(hip_ankle_ap_diff[ic])
+
+    if parameter == "hip":
+        overstriding = overstriding_oh
+    elif parameter == "knee":
+        overstriding = overstriding_ok
+    else:
+        raise ValueError(f"Invalid parameter {parameter} for overstriding calculation. Use 'hip' or 'knee'.")
+    return np.mean(overstriding) if len(overstriding) > 0 else np.nan
+
+
+def calc_step_rate(events, framerate) -> float:
+    if events is None:
+        warnings.warn(f"No events found.")
+        return np.nan
+    ics = events.get("Left", {}).get("IC", []) + events.get("Right", {}).get("IC", [])
+    ics = np.array(sorted(ics))
+    step_rates = 60 / np.diff(ics) * framerate  # convert to stepsper minute
+    step_rate = np.mean(step_rates) if len(step_rates) > 0 else np.nan
+    if step_rate > 300:  # if the step rate is higher than 300 steps per minute, it's probably a detection error, so we set it to NaN
+        warnings.warn(f"Step rate of {step_rate} steps per minute is too high, setting to NaN.")
+        step_rate = np.nan
+    elif step_rate < 60:  # if the step rate is lower than 60 steps per minute, it's probably a detection error, so we set it to NaN
+        warnings.warn(f"Step rate of {step_rate} steps per minute is too low, setting to NaN.")
+        step_rate = np.nan
+    else:
+        step_rate = step_rate
+    return step_rate
+
+
+def calc_kinematic_params(df_events: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calculate biomechanical outcome parameters for each lap based on the detected events and the kinematic data from the .mat files. The parameters include:
+    - Running speed (m/s)
+    - Step rate (steps per minute)
+    - Contact time (ms)  (not implemented yet)
+    - Flight time (ms) (not implemented yet)
+    - Step length (cm) (not implemented yet)
+    - Peak trunk flexion (forward lean) during stance (degrees) (not implemented yet)
+    - Vertical pelvis movement (cm)
+    - Vertical pelvis movement for left and right side separately (cm)
+    - Peal pelvis anterior-posterior tilt during stance (degrees) (not implemented yet)
+    - Pelvis rotation range of motion during stance (degrees) (not implemented yet)
+    - Pelvis obliquity range of motion during stance (degrees) (not implemented yet)
+    - Hip flexion range of motion during stance (degrees) (not implemented yet)
+    - Max knee flexion during stance (degrees)
+    - Knee flexion at initial contact (degrees) (not implemented yet)
+    - Knee flexion range of motion during stance (degrees) (not implemented yet)
+    - Ankle plantarflexion range of motion during stance (degrees) (not implemented yet)
+    - Overstriding (cm)
+    """
+    path_mat_root = Path(PATH_ROOT) / "kinematics" / "mat"
+    rows = []
+    for index, row in df_events.iterrows():
+        heat = row["Heat"]
+        bib = row["Bib"]
+        lap_no = row["Lap"]
+        events = row["Events"]
+        if events is None or not isinstance(events, dict):
+            continue
+        file_path = make_file_path(path_mat_root, heat, bib, lap_no)
+        print(f"Processing lap {lap_no} from file {file_path.name}...")
+        if not file_path.exists():
+            warnings.warn(f"File {file_path} does not exist, skipping...")
+            continue
+        data = loadmat(str(file_path))
+        framerate = data['FRAME_RATE'][0][0][0][0]
+        #
+        #
+        # Single value params
+        #
+        #
+        running_speed_ms = calc_running_speed(data)
+        step_rate = calc_step_rate(events, framerate)
+        #
+        #
+        # Sided params:
+        #
+        #
+        sides = ["Left", "Right"]
+        vertical_pelvis_movement_sided = dict().fromkeys(sides, np.nan)
+        max_flex_sided = dict().fromkeys(sides, np.nan)
+        overstriding = dict().fromkeys(sides, np.nan)
+        for side in sides:
+            vertical_pelvis_movement_sided[side] = calc_vertical_pelvis_movement_sided(data, events, side)
+            max_flex_sided[side] = calc_max_knee_flexion(data, events, side)
+            overstriding[side] = calc_overstriding(data, events, side, parameter="hip")
+
+        vertical_pelvis_movement_combined = np.nanmean(list(vertical_pelvis_movement_sided.values())) if len(vertical_pelvis_movement_sided) > 0 else np.nan
+        max_flex_combined = np.nanmean(list(max_flex_sided.values())) if len(max_flex_sided) > 0 else np.nan
+        overstriding_combined = np.nanmean(list(overstriding.values())) if len(overstriding) > 0 else np.nan
+
+        vertical_pelvis_movement_params = {"vertical_pelvis_movement_combined": vertical_pelvis_movement_combined,
+                                           "vertical_pelvis_movement_left": vertical_pelvis_movement_sided.get("Left", np.nan),
+                                           "vertical_pelvis_movement_right": vertical_pelvis_movement_sided.get("Right", np.nan)}
+        knee_params = {"max_knee_flexion_combined": max_flex_combined,
+                       "max_knee_flexion_left": max_flex_sided.get("Left", np.nan),
+                       "max_knee_flexion_right": max_flex_sided.get("Right", np.nan)}
+        overstriding_params = {"overstriding_combined": overstriding_combined,
+                               "overstriding_left": overstriding.get("Left", np.nan),
+                               "overstriding_right": overstriding.get("Right", np.nan)}
+
+        row_data = {"Heat": heat, "Bib": bib, "Lap": lap_no}
+
+        rows.append({**row_data,
+                     "running_speed_ms": running_speed_ms,
+                     "step_rate": step_rate,
+                     **vertical_pelvis_movement_params,
+                     **knee_params,
+                     **overstriding_params,
+                     })
+
+    df_kinematic_params = pd.DataFrame(rows)
+    df_kinematic_params.sort_values(by=["Heat", "Bib", "Lap"], inplace=True)
+    df_kinematic_params.reset_index(drop=True, inplace=True)
+    return df_kinematic_params
+
+
+if __name__ == '__main__':
+    path_mat_root = Path(PATH_ROOT) / "kinematics" / "mat"
+    heat_directories = [d for d in path_mat_root.iterdir() if d.is_dir()]
+    heat_directories.sort()
+    heats = [d.name for d in heat_directories]
+    laps = list(range(1, 14))
+
+    # df_events = calc_events(path_data_root=path_mat_root, heats=heats, laps=laps)
+    # safe_event_dataframe(df_events)
+    #
+    df_events = load_events_from_excel()
+
+    #
+    #
+    # Segment length based data checks
+    #
+    #
+
+    # data_check(events)
+    # df_limb_lenghts = load_result_dataframe("limb_lenghts.xlsx")
+    # plot_limb_lengths_over_laps(df_limb_lenghts)
+    # print(events.head())
+
+    df_kinematic_params = calc_kinematic_params(df_events)
+    safe_result_dataframe(df_kinematic_params, "kinematic_params.xlsx")

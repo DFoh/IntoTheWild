@@ -13,15 +13,16 @@ PATH_ROOT_WIN = r"C:\Users\dominik.fohrmann\OneDrive - MSH Medical School Hambur
 # for macOS:
 PATH_ROOT_MAC = r"/Users/dominikfohrmann/OneDrive - MSH Medical School Hamburg - University of Applied Sciences and Medical University/Dokumente/Projects/IntoTheWild/data/TrackGrandPrix"
 
-if matplotlib.__version__ != '3.7.1':
-    raise ImportError(
-        f"matplotlib version 3.7.1 is required for proper debugging in PyCharm, but found {matplotlib._version.version}. Please install the correct version.")
 
 if sys.platform.startswith('win'):
     PATH_ROOT = PATH_ROOT_WIN
     matplotlib.use(
         'Qt5Agg')  # maybe unnecessary with matplotlib 3.7.1, but explicitly set for PyCharm debugging on Windows to avoid backend issues
 elif sys.platform.startswith('darwin'):
+    if matplotlib.__version__ != '3.7.1':
+        raise ImportError(
+            f"matplotlib version 3.7.1 is required for proper debugging in PyCharm, but found {matplotlib._version.version}. Please install the correct version.")
+
     PATH_ROOT = PATH_ROOT_MAC
 else:
     raise OSError("Unsupported operating system. Please use Windows or macOS.")

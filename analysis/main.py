@@ -8,7 +8,7 @@ from scipy.io import loadmat
 from analysis.util import PATH_ROOT, load_events_from_excel, make_file_path, \
     safe_result_dataframe
 from gait_events import get_running_events
-
+import matplotlib.pyplot as plt
 
 def get_valid_frame_range(data, side: str):
     # ISSUE: the data will have NaN values at the start and end because the skeleton is not solved in the first and last frames.
@@ -237,6 +237,89 @@ def calc_trunk_flexion(data, events, side) -> float:
     return np.mean(flexions) if len(flexions) > 0 else np.nan
 
 
+import matplotlib.pyplot as plt
+
+
+def calc_peak_pelvis_ap_tilt(data, events, side) -> float:
+    # TODO: Check out if this makes sense. The pelvis anterior tilt is the rotation around the ml axis in the global CS,
+    # TODO: ... but the actual "peak" is shortly after the TO and not during the stance
+    # TODO: ...(which is not what Maas et al. 2018 report).
+    # TODO: ... so the question is, if we should look for the negative peak instead (which is markedly in during the stance).
+    # TODO: ... need to check this in the literature before continuing with the implementation.
+    return np.nan
+    pelvis_ap_tilt = data[f"Pelvis_Angles"][0][0][:, 1]
+    if events is None or side not in events:
+        warnings.warn(f"No events found.")
+        return np.nan
+    evts = events.get(side)
+    plt.close()
+    plt.plot(pelvis_ap_tilt, label="Pelvis AP Tilt")
+    for ic, tc in zip(evts["IC"], evts["TO"]):
+        plt.axvline(x=ic, color='g', linestyle='--', label="IC")
+        plt.axvline(x=tc, color='r', linestyle='--', label="TO")
+    plt.show()
+    tilts = []
+    for ic, to in zip(evts["IC"], evts["TO"]):
+        stance_pelvis_ap_tilt = pelvis_ap_tilt[ic:to]
+        tilts.append(np.max(stance_pelvis_ap_tilt))
+    return np.mean(tilts) if len(tilts) > 0 else np.nan
+
+
+def calc_peak_pelvis_obliquity(data, events, side) -> float:
+    # Global CS is defined as:
+    # x: forward direction
+    # y: left
+    # z: up
+    pelvis_obliquity = data[f"Pelvis_Angles"][0][0][:, 0]  # rotation around ap-axis
+    # invert the signal for the left side to make it comparable to the right side.
+    # -> negative values reflect a contralateral drop of the pelvis
+    if side == "Left":
+        pelvis_obliquity = -pelvis_obliquity
+
+    if events is None or side not in events:
+        warnings.warn(f"No events found.")
+        return np.nan
+    evts = events.get(side)
+    obliquities = []
+    for ic, to in zip(evts["IC"], evts["TO"]):
+        stance_pelvis_obliquity = pelvis_obliquity[ic:to]
+        # we take the minimum because a contralateral drop of the pelvis is reflected in negative values
+        obliquities.append(np.min(stance_pelvis_obliquity))
+    return np.mean(obliquities) if len(obliquities) > 0 else np.nan
+
+
+def calc_pelvis_rotation_rom(data, events, side) -> float:
+    # TODO: PHEW... check the signal quality of the pelvis...
+    # TODO: Currently, it doesn't seem like we'll get meaningful results for this parameter.
+    return np.nan
+    # Global CS is defined as:
+    # x: forward direction
+    # y: left
+    # z: up
+    pelvis_vertical_rotation = data[f"Pelvis_Angles"][0][0][:, 2]  # rotation around up-axis
+    # offset the signal, since the global/lab CS is defined rotated around -90 def
+    pelvis_vertical_rotation = pelvis_vertical_rotation + 90
+    # invert the signal for the left side to make it comparable to the right side.
+    # -> negative values reflect
+
+    if side == "Left":
+        pelvis_vertical_rotation = -pelvis_vertical_rotation
+
+    if events is None or side not in events:
+        warnings.warn(f"No events found.")
+        return np.nan
+    ctrltrl_events = events.get("Right" if side == "Left" else "Left")
+    plt.close()
+    plt.plot(pelvis_vertical_rotation, label="Pelvis Vertical Rotation")
+    plt.axhline(y=0, color='k', linestyle='--', label="90 degrees")
+    for ic, tc in zip(events.get(side).get("IC", []), events.get(side).get("TO", [])):
+        plt.axvline(x=ic, color='g', linestyle='-', label="IC")
+        plt.axvline(x=tc, color='r', linestyle='-', label="TO")
+    for ic, tc in zip(ctrltrl_events.get("IC", []), ctrltrl_events.get("TO", [])):
+        plt.axvline(x=ic, color='g', linestyle='--', label="IC")
+        plt.axvline(x=tc, color='r', linestyle='--', label="TO")
+    plt.show()
+
 def calc_kinematic_params(df_events: pd.DataFrame) -> pd.DataFrame:
     """
     Calculate biomechanical outcome parameters for each lap based on the detected events and the kinematic data from the .mat files. The parameters include:
@@ -245,12 +328,12 @@ def calc_kinematic_params(df_events: pd.DataFrame) -> pd.DataFrame:
     - Contact time (ms) ✅
     - Flight time (ms)  ✅
     - Step length (cm) ✅
-    - Peak trunk flexion (forward lean) during stance (degrees) (not implemented yet)
+    - Peak trunk flexion (forward lean) during stance (degrees)  ✅
     - Vertical pelvis movement (cm) ✅
     - Vertical pelvis movement for left and right side separately (cm) ✅
-    - Peal pelvis anterior-posterior tilt during stance (degrees) (not implemented yet)
-    - Pelvis rotation range of motion during stance (degrees) (not implemented yet)
-    - Pelvis obliquity range of motion during stance (degrees) (not implemented yet)
+    - Peak pelvis anterior-posterior tilt during stance (degrees) ❌ needs further investigation
+    - Pelvis obliquity range of motion during stance (degrees) ✅
+    - Pelvis rotation range of motion during stance (degrees) ❌ needs further investigation
     - Hip flexion range of motion during stance (degrees) (not implemented yet)
     - Max knee flexion during stance (degrees) ✅
     - Knee flexion at initial contact (degrees) (not implemented yet)
@@ -293,8 +376,13 @@ def calc_kinematic_params(df_events: pd.DataFrame) -> pd.DataFrame:
             flight_time = calc_flight_time(events_side, framerate)
             step_length = calc_step_length(data, events, side)
             peak_trunk_flexion = calc_trunk_flexion(data, events, side)
-
+            # Pelvis Parameters
             vertical_pelvis_movement = calc_vertical_pelvis_movement_sided(data, events, side)
+            peak_pelvis_ap_tilt = calc_peak_pelvis_ap_tilt(data, events, side)
+            neg_peak_pelvis_obliquity = calc_peak_pelvis_obliquity(data, events, side)
+            pelvis_rotation_rom = calc_pelvis_rotation_rom(data, events, side)
+
+
             max_knee_flex_stance = calc_max_knee_flexion(data, events, side)
             overstriding = calc_overstriding(data, events, side, parameter="hip")
 
@@ -308,6 +396,8 @@ def calc_kinematic_params(df_events: pd.DataFrame) -> pd.DataFrame:
                          "flight_time_ms": flight_time,
                          "step_length_m": step_length,
                          "trunk_flexion_deg": peak_trunk_flexion,
+                         "peak_pelvis_ap_tilt_deg": peak_pelvis_ap_tilt,
+                         "neg_peak_pelvis_obliquity_deg": neg_peak_pelvis_obliquity,
                          "vertical_pelvis_movement_cm": vertical_pelvis_movement,
                          "max_knee_flex_stance_deg": max_knee_flex_stance,
                          "overstriding_cm": overstriding,

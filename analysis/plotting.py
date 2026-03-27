@@ -130,6 +130,7 @@ def main():
         ("step_length_m", "Step Length (m)"),
         ("trunk_flexion_deg", "Peak Trunk Flexion (degrees)"),
         ("vertical_pelvis_movement_cm", "Vertical Pelvis Movement (cm)"),
+        ("neg_peak_pelvis_obliquity_deg", "Negative Peak Pelvis Obliquity (degrees)"),
         ("max_knee_flex_stance_deg", "Max Knee Flexion in Stance (degrees)"),
         ("overstriding_cm", "Overstriding (cm)"),
     ]

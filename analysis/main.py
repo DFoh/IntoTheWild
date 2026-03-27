@@ -124,46 +124,54 @@ def calc_vertical_pelvis_movement_sided(data, events, side) -> float:
     return np.mean(amplitude) * 100 if len(amplitude) > 0 else np.nan
 
 
-def calc_max_knee_flexion(data, events, side: str) -> float:
+def calc_knee_flexion_metrics(data, events, side: str) -> dict:
     knee_flexion = data[f'{side}_Knee_Angles'][0][0][:, 0]
     if events is None or side not in events:
         warnings.warn(f"No events found.")
-        return np.nan
+        return {"knee_flex_at_ic": np.nan, "knee_flex_max": np.nan, "knee_flex_rom": np.nan}
+
     evts = events.get(side)
-    max_flex = []
+    at_ic, max_flex, rom = [], [], []
+
     for ic, to in zip(evts["IC"], evts["TO"]):
-        stride_knee_flexion = knee_flexion[ic:to]
-        max_flex.append(np.max(stride_knee_flexion))
+        stance = knee_flexion[ic:to]
+        val_at_ic = knee_flexion[ic]
+        val_max = np.max(stance)
 
-    return np.mean(max_flex) if len(max_flex) > 0 else np.nan
+        at_ic.append(val_at_ic)
+        max_flex.append(val_max)
+        rom.append(val_max - val_at_ic)
+
+    return {
+        "knee_flex_at_ic": np.mean(at_ic) if at_ic else np.nan,
+        "knee_flex_max": np.mean(max_flex) if max_flex else np.nan,
+        "knee_flex_rom": np.mean(rom) if rom else np.nan,
+    }
 
 
-def calc_knee_flexion_rom(data, events, side: str) -> float:
-    knee_flexion = data[f'{side}_Knee_Angles'][0][0][:, 0]
+def calc_ankle_flexion_metrics(data, events, side: str) -> dict:
+    ankle_flexion = data[f'{side}_Ankle_Angles'][0][0][:, 0]
     if events is None or side not in events:
         warnings.warn(f"No events found.")
-        return np.nan
+        return {"ankle_flex_at_ic": np.nan, "ankle_flex_max": np.nan, "ankle_flex_rom": np.nan}
+
     evts = events.get(side)
-    knee_flex_rom = []
+    at_ic, max_flex, rom = [], [], []
+
     for ic, to in zip(evts["IC"], evts["TO"]):
-        stride_knee_flexion = knee_flexion[ic:to]
-        knee_flex_rom.append(np.ptp(stride_knee_flexion))
+        stance = ankle_flexion[ic:to]
+        val_at_ic = ankle_flexion[ic]
+        val_max = np.max(stance)
 
-    return np.mean(knee_flex_rom) if len(knee_flex_rom) > 0 else np.nan
+        at_ic.append(val_at_ic)
+        max_flex.append(val_max)
+        rom.append(val_max - val_at_ic)
 
-
-def calc_knee_flexion_at_ic(data, events, side: str) -> float:
-    knee_flexion = data[f'{side}_Knee_Angles'][0][0][:, 0]
-    if events is None or side not in events:
-        warnings.warn(f"No events found.")
-        return np.nan
-    evts = events.get(side)
-    knee_flex_at_ic_list = []
-    for ic in evts["IC"]:
-        knee_flexion_at_ic = knee_flexion[ic]
-        knee_flex_at_ic_list.append(knee_flexion_at_ic)
-
-    return np.mean(knee_flex_at_ic_list) if len(knee_flex_at_ic_list) > 0 else np.nan
+    return {
+        "ankle_flex_at_ic": np.mean(at_ic) if at_ic else np.nan,
+        "ankle_flex_max": np.mean(max_flex) if max_flex else np.nan,
+        "ankle_flex_rom": np.mean(rom) if rom else np.nan,
+    }
 
 
 def calc_overstriding(data, events, side: str, parameter: str) -> float:
@@ -181,13 +189,13 @@ def calc_overstriding(data, events, side: str, parameter: str) -> float:
     overstriding_oh = []
     overstriding_ok = []
     for ic in evts["IC"]:
-        overstriding_oh.append(hip_ankle_ap_diff[ic])
-        overstriding_ok.append(hip_ankle_ap_diff[ic])
+        overstriding_oh.append(hip_ankle_ap_diff[ic] * 100)  # convert to cm just for convenience
+        overstriding_ok.append(hip_ankle_ap_diff[ic] + 100)  # convert to cm just for convenience
 
     if parameter == "hip":
-        overstriding = overstriding_oh * 100  # convert to cm just for convenience
+        overstriding = overstriding_oh
     elif parameter == "knee":
-        overstriding = overstriding_ok * 100  # convert to cm just for convenience
+        overstriding = overstriding_ok
     else:
         raise ValueError(f"Invalid parameter {parameter} for overstriding calculation. Use 'hip' or 'knee'.")
     return np.mean(overstriding) if len(overstriding) > 0 else np.nan
@@ -380,9 +388,10 @@ def calc_kinematic_params(df_events: pd.DataFrame) -> pd.DataFrame:
     - Pelvis rotation range of motion during stance (degrees) ❌ needs further investigation
     - Hip flexion range of motion during stance (degrees) ✅
     - Max knee flexion during stance (degrees) ✅
-    - Knee flexion at initial contact (degrees) (not implemented yet)
-    - Knee flexion range of motion during stance (degrees) (not implemented yet)
-    - Ankle plantarflexion range of motion during stance (degrees) (not implemented yet)
+    - Knee flexion at initial contact (degrees) ✅
+    - Knee flexion range of motion during stance (degrees) ✅
+    - Ankle plantarflexion at initial contact (degrees) (not implemented yet)
+    - Ankle flexion range of motion during stance (degrees) (not implemented yet)
     - Overstriding (cm) ✅
     """
     path_mat_root = Path(PATH_ROOT) / "kinematics" / "mat"
@@ -428,9 +437,15 @@ def calc_kinematic_params(df_events: pd.DataFrame) -> pd.DataFrame:
             # Hip
             hip_flexion_rom = calc_hip_flexion_rom(data, events, side)
             # Knee
-            peak_knee_flex_stance = calc_max_knee_flexion(data, events, side)
-            knee_flexion_at_ic = calc_knee_flexion_at_ic(data, events, side)
-            knee_flexion_rom = calc_knee_flexion_rom(data, events, side)
+            knee_metrics = calc_knee_flexion_metrics(data, events, side)
+            peak_knee_flex_stance = knee_metrics.get("knee_flex_max")
+            knee_flexion_at_ic = knee_metrics.get("knee_flex_at_ic")
+            knee_flexion_rom = knee_metrics.get("knee_flex_rom")
+            # Ankle
+            ankle_metrics = calc_ankle_flexion_metrics(data, events, side)
+            ankle_flexion_at_ic = ankle_metrics.get("ankle_flex_at_ic")
+            ankle_flexion_rom = ankle_metrics.get("ankle_flex_rom")
+            ankle_flexion_max = ankle_metrics.get("ankle_flex_max")
 
             overstriding = calc_overstriding(data, events, side, parameter="hip")
 
@@ -451,6 +466,9 @@ def calc_kinematic_params(df_events: pd.DataFrame) -> pd.DataFrame:
                          "peak_knee_flex_stance_deg": peak_knee_flex_stance,
                          "knee_flexion_at_ic_deg": knee_flexion_at_ic,
                          "knee_flexion_rom_deg": knee_flexion_rom,
+                         "ankle_flexion_at_ic_deg": ankle_flexion_at_ic,
+                         "ankle_flexion_rom_deg": ankle_flexion_rom,
+                         "ankle_dorsiflexion_max_deg": ankle_flexion_max,
                          "overstriding_cm": overstriding,
                          })
 

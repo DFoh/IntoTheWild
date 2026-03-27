@@ -135,6 +135,9 @@ def main():
         ("peak_knee_flex_stance_deg", "Peak Knee Flexion in Stance (degrees)"),
         ("knee_flexion_at_ic_deg", "Knee Flexion at Initial Contact (degrees)"),
         ("knee_flexion_rom_deg", "Knee Flexion ROM (degrees)"),
+        ("ankle_flexion_at_ic_deg", "Ankle Flexion at Initial Contact (degrees)"),
+        ("ankle_flexion_rom_deg", "Ankle Flexion ROM (degrees)"),
+        ("ankle_dorsiflexion_max_deg", "Max Ankle Dorsiflexion (degrees)"),
         ("overstriding_cm", "Overstriding (cm)"),
     ]
     for param_name, y_label in param_names:

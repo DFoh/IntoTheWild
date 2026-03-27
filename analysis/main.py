@@ -320,6 +320,21 @@ def calc_pelvis_rotation_rom(data, events, side) -> float:
         plt.axvline(x=tc, color='r', linestyle='--', label="TO")
     plt.show()
 
+
+def calc_hip_flexion_rom(data, events, side) -> float:
+    # TODO: Consider if this makes sense.
+    # TODO: Peak hip flexion
+    hip_flexion = data[f'{side}_Hip_Angles'][0][0][:, 0]
+    if events is None or side not in events:
+        warnings.warn(f"No events found.")
+        return np.nan
+    evts = events.get(side)
+    flexions = []
+    for ic, to in zip(evts["IC"], evts["TO"]):
+        stance_hip_flexion = hip_flexion[ic:to]
+        flexions.append(np.ptp(stance_hip_flexion))
+    return np.mean(flexions) if len(flexions) > 0 else np.nan
+
 def calc_kinematic_params(df_events: pd.DataFrame) -> pd.DataFrame:
     """
     Calculate biomechanical outcome parameters for each lap based on the detected events and the kinematic data from the .mat files. The parameters include:
@@ -334,7 +349,7 @@ def calc_kinematic_params(df_events: pd.DataFrame) -> pd.DataFrame:
     - Peak pelvis anterior-posterior tilt during stance (degrees) ❌ needs further investigation
     - Pelvis obliquity range of motion during stance (degrees) ✅
     - Pelvis rotation range of motion during stance (degrees) ❌ needs further investigation
-    - Hip flexion range of motion during stance (degrees) (not implemented yet)
+    - Hip flexion range of motion during stance (degrees) ✅
     - Max knee flexion during stance (degrees) ✅
     - Knee flexion at initial contact (degrees) (not implemented yet)
     - Knee flexion range of motion during stance (degrees) (not implemented yet)
@@ -381,8 +396,10 @@ def calc_kinematic_params(df_events: pd.DataFrame) -> pd.DataFrame:
             peak_pelvis_ap_tilt = calc_peak_pelvis_ap_tilt(data, events, side)
             neg_peak_pelvis_obliquity = calc_peak_pelvis_obliquity(data, events, side)
             pelvis_rotation_rom = calc_pelvis_rotation_rom(data, events, side)
+            # Hip
+            hip_flexion_rom = calc_hip_flexion_rom(data, events, side)
 
-
+            # Knee
             max_knee_flex_stance = calc_max_knee_flexion(data, events, side)
             overstriding = calc_overstriding(data, events, side, parameter="hip")
 
@@ -396,9 +413,10 @@ def calc_kinematic_params(df_events: pd.DataFrame) -> pd.DataFrame:
                          "flight_time_ms": flight_time,
                          "step_length_m": step_length,
                          "trunk_flexion_deg": peak_trunk_flexion,
+                         "vertical_pelvis_movement_cm": vertical_pelvis_movement,
                          "peak_pelvis_ap_tilt_deg": peak_pelvis_ap_tilt,
                          "neg_peak_pelvis_obliquity_deg": neg_peak_pelvis_obliquity,
-                         "vertical_pelvis_movement_cm": vertical_pelvis_movement,
+                         "hip_flexion_rom_deg": hip_flexion_rom,
                          "max_knee_flex_stance_deg": max_knee_flex_stance,
                          "overstriding_cm": overstriding,
                          })

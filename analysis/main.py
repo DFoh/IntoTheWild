@@ -6,7 +6,7 @@ import pandas as pd
 from scipy.io import loadmat
 
 from analysis.util import PATH_ROOT, load_events_from_excel, make_file_path, \
-    safe_result_dataframe, safe_event_dataframe
+    safe_result_dataframe
 from gait_events import get_running_events
 
 
@@ -200,7 +200,7 @@ def calc_flight_time(events_side, frame_rate) -> float:
     return np.mean(fts) if len(fts) > 0 else np.nan
 
 
-def calc_step_length(data, events, side ) -> float:
+def calc_step_length(data, events, side) -> float:
     # calculate the ap distance between consecutive ipsi-/contralateral foot center positions during stance
     # at the moment where the foot COM velocity is minimal (mid-stance proxy)
     foot_pos = data[f"{side}_Foot_COM_Position"][0][0]
@@ -220,7 +220,21 @@ def calc_step_length(data, events, side ) -> float:
     return np.mean(step_lengths) if len(step_lengths) > 0 else np.nan
 
 
-
+def calc_trunk_flexion(data, events, side) -> float:
+    # Global CS is defined as:
+    # x: anterior direction (running direction)
+    # y: left
+    # z: up
+    trunk_flexion = data[f"Thorax_Angles"][0][0][:, 1]
+    if events is None or side not in events:
+        warnings.warn(f"No events found.")
+        return np.nan
+    evts = events.get(side)
+    flexions = []
+    for ic, to in zip(evts["IC"], evts["TO"]):
+        stance_trunk_flexion = trunk_flexion[ic:to]
+        flexions.append(np.max(stance_trunk_flexion))
+    return np.mean(flexions) if len(flexions) > 0 else np.nan
 
 
 def calc_kinematic_params(df_events: pd.DataFrame) -> pd.DataFrame:
@@ -230,7 +244,7 @@ def calc_kinematic_params(df_events: pd.DataFrame) -> pd.DataFrame:
     - Step rate (steps per minute) ✅
     - Contact time (ms) ✅
     - Flight time (ms)  ✅
-    - Step length (cm) (not implemented yet)
+    - Step length (cm) ✅
     - Peak trunk flexion (forward lean) during stance (degrees) (not implemented yet)
     - Vertical pelvis movement (cm) ✅
     - Vertical pelvis movement for left and right side separately (cm) ✅
@@ -273,13 +287,12 @@ def calc_kinematic_params(df_events: pd.DataFrame) -> pd.DataFrame:
         #
         #
         sides = ["Left", "Right"]
-
-        overstriding = dict().fromkeys(sides, np.nan)
         for side in sides:
             events_side = events.get(side)
             contact_time = calc_contact_time(events_side, framerate)
             flight_time = calc_flight_time(events_side, framerate)
             step_length = calc_step_length(data, events, side)
+            peak_trunk_flexion = calc_trunk_flexion(data, events, side)
 
             vertical_pelvis_movement = calc_vertical_pelvis_movement_sided(data, events, side)
             max_knee_flex_stance = calc_max_knee_flexion(data, events, side)
@@ -294,6 +307,7 @@ def calc_kinematic_params(df_events: pd.DataFrame) -> pd.DataFrame:
                          "contact_time_ms": contact_time,
                          "flight_time_ms": flight_time,
                          "step_length_m": step_length,
+                         "trunk_flexion_deg": peak_trunk_flexion,
                          "vertical_pelvis_movement_cm": vertical_pelvis_movement,
                          "max_knee_flex_stance_deg": max_knee_flex_stance,
                          "overstriding_cm": overstriding,

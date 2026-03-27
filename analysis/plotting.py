@@ -1,16 +1,15 @@
+import sys
 import warnings
-
-import matplotlib.pyplot as plt
-import matplotlib
-import seaborn as sns
-import pandas as pd
-import numpy as np
 from pathlib import Path
 
+import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
 from scipy.io import loadmat
 
-from analysis.util import PATH_ROOT, load_result_dataframe, make_file_path, safe_result_dataframe
-import sys
+from analysis.util import PATH_ROOT, make_file_path, safe_result_dataframe, load_result_dataframe
 
 # For debugging in PyCharm:
 if sys.platform.startswith('win'):
@@ -23,23 +22,6 @@ else:
     raise OSError("Unsupported operating system. Please use Windows or macOS.")
 
 
-def plot_param_over_laps(df: pd.DataFrame, column_name: str):
-    # sns.lineplot(data=df, x="Lap", y=column_name, hue="Heat", markers=False)
-    # sns.lineplot(data=df, x="Lap", y=column_name, hue="Heat", units="Bib", estimator=None)
-    # plt.show()
-    path_plot = Path(PATH_ROOT) / "plots" / f"{column_name}_over_laps"
-    path_plot.mkdir(parents=True, exist_ok=True)
-    bibs = df["Bib"].unique()
-    for bib in bibs:
-        df_bib = df[df["Bib"] == bib]
-        plt.plot(df_bib["Lap"], df_bib[column_name], marker='o', label=f'Bib {bib}')
-        plt.title(f"{bib} - {column_name}")
-        plt.savefig(path_plot / f"{bib} - {column_name}.png")
-        plt.close()
-
-
-#
-#
 def plot_knee_flexion_over_laps_subject_wise(df: pd.DataFrame):
     # sns.lineplot(data=df, x="Lap", y=column_name, hue="Heat", markers=False)
     # sns.lineplot(data=df, x="Lap", y=column_name, hue="Heat", units="Bib", estimator=None)
@@ -80,7 +62,8 @@ def data_check(df_events: pd.DataFrame):
             try:
                 ankle_center_traj = data[f'{side}_Ankle_Center'][0][0]
             except KeyError:
-                ankle_center_traj = data[f'{side}t_Ankle_Center'][0][0]  # stupid typo in the original data, but we have to deal with it
+                ankle_center_traj = data[f'{side}t_Ankle_Center'][0][
+                    0]  # stupid typo in the original data, but we have to deal with it
             thigh_length = np.linalg.norm(hip_center_traj - knee_center_traj, axis=1)
             shank_length = np.linalg.norm(knee_center_traj - ankle_center_traj, axis=1)
             avg_thigh_length = np.nanmean(thigh_length)
@@ -121,78 +104,37 @@ def plot_limb_lengths_over_laps(df):
         plt.close()
 
 
-def plot_running_speed_over_laps(df):
-    path_plot = Path(PATH_ROOT) / "plots" / "running_speed_over_laps"
+def plot_parameter_over_laps(df, parameter_name, y_label):
+    path_plot = Path(PATH_ROOT) / "kinematics" / "plots" / "parameters_over_laps"
     path_plot.mkdir(parents=True, exist_ok=True)
-    sns.lineplot(data=df, x="Lap", y="running_speed_ms", hue="Heat", units="Bib", estimator=None, marker='o')
-    plt.title("Running Speed over Laps")
-    plt.savefig(path_plot / f"running_speed_vs_laps_indiv.png")
-    plt.close()
-    sns.lineplot(data=df, x="Lap", y="running_speed_ms", hue="Heat", marker='o')
-    plt.title("Running Speed over Laps (average)")
-    plt.savefig(path_plot / f"running_speed_vs_laps_avg.png")
-    plt.close()
+    # average for each lap and bib for left and right side
 
-def plot_step_rate_over_laps(df):
-    path_plot = Path(PATH_ROOT) / "plots" / "step_rate_over_laps"
-    path_plot.mkdir(parents=True, exist_ok=True)
-    sns.lineplot(data=df, x="Lap", y="step_rate", hue="Heat", units="Bib", estimator=None, marker='o')
-    plt.title("Step Rate over Laps")
-    plt.savefig(path_plot / f"step_rate_vs_laps_indiv.png")
+    df = df.groupby(["Heat", "Bib", "Lap"]).mean(numeric_only=True).reset_index()
+    sns.lineplot(data=df, x="Lap", y=parameter_name, hue="Heat", units="Bib", estimator=None, marker='o')
+    plt.title(f"{y_label} over Laps")
+    plt.savefig(path_plot / f"{parameter_name}_vs_laps_indiv.png")
     plt.close()
-    sns.lineplot(data=df, x="Lap", y="step_rate", hue="Heat", marker='o')
-    plt.title("Step Rate over Laps (average)")
-    plt.savefig(path_plot / f"step_rate_vs_laps_avg.png")
-    plt.close()
-
-def plot_knee_flexion_over_laps(df):
-    path_plot = Path(PATH_ROOT) / "plots" / "max_knee_flexion_over_laps"
-    path_plot.mkdir(parents=True, exist_ok=True)
-    sns.lineplot(data=df, x="Lap", y="max_knee_flexion_combined", hue="Heat", units="Bib", estimator=None, marker='o')
-    plt.title("Max Knee Flexion over Laps")
-    plt.savefig(path_plot / f"max_knee_flexion_vs_laps_indiv.png")
-    plt.close()
-    sns.lineplot(data=df, x="Lap", y="max_knee_flexion_combined", hue="Heat", marker='o')
-    plt.title("Max Knee Flexion over Laps (average)")
-    plt.savefig(path_plot / f"max_knee_flexion_vs_laps_avg.png")
-    plt.close()
-
-
-def plot_vertical_pelvis_movement_over_laps(df):
-    path_plot = Path(PATH_ROOT) / "plots" / "vertical_pelvis_movement_over_laps"
-    path_plot.mkdir(parents=True, exist_ok=True)
-    sns.lineplot(data=df, x="Lap", y="vertical_pelvis_movement_combined", hue="Heat", units="Bib", estimator=None, marker='o')
-    plt.title("Vertical Pelvis Movement over Laps")
-    plt.savefig(path_plot / f"vertical_pelvis_movement_vs_laps_indiv.png")
-    plt.close()
-    sns.lineplot(data=df, x="Lap", y="vertical_pelvis_movement_combined", hue="Heat", marker='o')
-    plt.title("Vertical Pelvis Movement over Laps (average)")
-    plt.savefig(path_plot / f"vertical_pelvis_movement_vs_laps_avg.png")
-    plt.close()
-
-
-def plot_overstriding_over_laps(df):
-    plt.close("all")
-    path_plot = Path(PATH_ROOT) / "plots" / "overstriding_over_laps"
-    path_plot.mkdir(parents=True, exist_ok=True)
-    sns.lineplot(data=df, x="Lap", y="overstriding_combined", hue="Heat", units="Bib", estimator=None, marker='o')
-    plt.title("Overstriding over Laps")
-    plt.savefig(path_plot / f"overstriding_vs_laps_indiv.png")
-    plt.close()
-    sns.lineplot(data=df, x="Lap", y="overstriding_combined", hue="Heat", marker='o')
-    plt.title("Overstriding over Laps (average)")
-    plt.savefig(path_plot / f"overstriding_vs_laps_avg.png")
+    sns.lineplot(data=df, x="Lap", y=parameter_name, hue="Heat", marker='o')
+    plt.title(f"{y_label} over Laps (average)")
+    plt.savefig(path_plot / f"{parameter_name}_vs_laps_avg.png")
     plt.close()
 
 
 def main():
     df_kinematic_params = load_result_dataframe("kinematic_params.xlsx")
-    plot_running_speed_over_laps(df_kinematic_params)
-    plot_step_rate_over_laps(df_kinematic_params)
-    plot_knee_flexion_over_laps(df_kinematic_params)
-    plot_knee_flexion_over_laps_subject_wise(df_kinematic_params)
-    plot_vertical_pelvis_movement_over_laps(df_kinematic_params)
-    plot_overstriding_over_laps(df_kinematic_params)
+    param_names = [
+        ("running_speed_ms", "Running Speed (m/s)"),
+        ("step_rate_spm", "Step Rate (steps/min)"),
+        ("contact_time_ms", "Contact Time (ms)"),
+        ("flight_time_ms", "Flight Time (ms)"),
+        ("step_length_m", "Step Length (m)"),
+        ("trunk_flexion_deg", "Peak Trunk Flexion (degrees)"),
+        ("vertical_pelvis_movement_cm", "Vertical Pelvis Movement (cm)"),
+        ("max_knee_flex_stance_deg", "Max Knee Flexion in Stance (degrees)"),
+        ("overstriding_cm", "Overstriding (cm)"),
+    ]
+    for param_name, y_label in param_names:
+        plot_parameter_over_laps(df_kinematic_params, param_name, y_label)
 
 
 if __name__ == '__main__':

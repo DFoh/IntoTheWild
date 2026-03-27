@@ -153,6 +153,16 @@ def check_valid_frame_range(valid_start, valid_end, sample_rate) -> bool:
     return True
 
 
+def get_mid_stance_proxy_events(foot_vel, events) -> list:
+    foot_vel_res = np.linalg.norm(foot_vel, axis=1)
+    ics = events["IC"]
+    tos = events["TO"]
+    mss = []
+    for ic, to in zip(ics, tos):
+        ms = ic + np.argmin(foot_vel_res[ic:to])
+        mss.append(ms)
+    return mss
+
 def get_running_events(data):
     events = {}
     sample_rate = data['FRAME_RATE'][0][0][0][0]  # Assuming frame rate is stored in this field
@@ -166,8 +176,14 @@ def get_running_events(data):
         heel_vert_pos = data[f"{side}_Heel_Pos"][0][0][valid_start:valid_end, 2]
         toe_vert_pos = data[f"{side}_Toe_Pos"][0][0][valid_start:valid_end,2]
         events[side] = get_running_events_maiwald(heel_vert_pos, toe_vert_pos, sample_rate)
+        # add event of minimum foot velocity as a robust mid-stance event
+        foot_traj = data[f"{side}_Foot_COM_Position"][0][0][valid_start:valid_end]
+        foot_vel = np.gradient(foot_traj, axis=0) * sample_rate
+        events[side]["MS"] = get_mid_stance_proxy_events(foot_vel, events[side])
         # correct the detected event frames to the actual frame numbers in the original file by adding the valid_start offset
         events[side]["IC"] = [frame + valid_start for frame in events[side]["IC"]]
         events[side]["TO"] = [frame + valid_start for frame in events[side]["TO"]]
+        events[side]["MS"] = [frame + valid_start for frame in events[side]["MS"]]
+
     return events
 

@@ -132,7 +132,9 @@ def main():
         ("vertical_pelvis_movement_cm", "Vertical Pelvis Movement (cm)"),
         ("neg_peak_pelvis_obliquity_deg", "Negative Peak Pelvis Obliquity (degrees)"),
         ("hip_flexion_rom_deg", "Hip Flexion ROM (degrees)"),
-        ("max_knee_flex_stance_deg", "Max Knee Flexion in Stance (degrees)"),
+        ("peak_knee_flex_stance_deg", "Peak Knee Flexion in Stance (degrees)"),
+        ("knee_flexion_at_ic_deg", "Knee Flexion at Initial Contact (degrees)"),
+        ("knee_flexion_rom_deg", "Knee Flexion ROM (degrees)"),
         ("overstriding_cm", "Overstriding (cm)"),
     ]
     for param_name, y_label in param_names:

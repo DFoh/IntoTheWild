@@ -8,7 +8,7 @@ from scipy.io import loadmat
 from analysis.util import PATH_ROOT, load_events_from_excel, make_file_path, \
     safe_result_dataframe
 from gait_events import get_running_events
-import matplotlib.pyplot as plt
+
 
 def get_valid_frame_range(data, side: str):
     # ISSUE: the data will have NaN values at the start and end because the skeleton is not solved in the first and last frames.
@@ -136,6 +136,34 @@ def calc_max_knee_flexion(data, events, side: str) -> float:
         max_flex.append(np.max(stride_knee_flexion))
 
     return np.mean(max_flex) if len(max_flex) > 0 else np.nan
+
+
+def calc_knee_flexion_rom(data, events, side: str) -> float:
+    knee_flexion = data[f'{side}_Knee_Angles'][0][0][:, 0]
+    if events is None or side not in events:
+        warnings.warn(f"No events found.")
+        return np.nan
+    evts = events.get(side)
+    knee_flex_rom = []
+    for ic, to in zip(evts["IC"], evts["TO"]):
+        stride_knee_flexion = knee_flexion[ic:to]
+        knee_flex_rom.append(np.ptp(stride_knee_flexion))
+
+    return np.mean(knee_flex_rom) if len(knee_flex_rom) > 0 else np.nan
+
+
+def calc_knee_flexion_at_ic(data, events, side: str) -> float:
+    knee_flexion = data[f'{side}_Knee_Angles'][0][0][:, 0]
+    if events is None or side not in events:
+        warnings.warn(f"No events found.")
+        return np.nan
+    evts = events.get(side)
+    knee_flex_at_ic_list = []
+    for ic in evts["IC"]:
+        knee_flexion_at_ic = knee_flexion[ic]
+        knee_flex_at_ic_list.append(knee_flexion_at_ic)
+
+    return np.mean(knee_flex_at_ic_list) if len(knee_flex_at_ic_list) > 0 else np.nan
 
 
 def calc_overstriding(data, events, side: str, parameter: str) -> float:
@@ -335,6 +363,7 @@ def calc_hip_flexion_rom(data, events, side) -> float:
         flexions.append(np.ptp(stance_hip_flexion))
     return np.mean(flexions) if len(flexions) > 0 else np.nan
 
+
 def calc_kinematic_params(df_events: pd.DataFrame) -> pd.DataFrame:
     """
     Calculate biomechanical outcome parameters for each lap based on the detected events and the kinematic data from the .mat files. The parameters include:
@@ -398,9 +427,11 @@ def calc_kinematic_params(df_events: pd.DataFrame) -> pd.DataFrame:
             pelvis_rotation_rom = calc_pelvis_rotation_rom(data, events, side)
             # Hip
             hip_flexion_rom = calc_hip_flexion_rom(data, events, side)
-
             # Knee
-            max_knee_flex_stance = calc_max_knee_flexion(data, events, side)
+            peak_knee_flex_stance = calc_max_knee_flexion(data, events, side)
+            knee_flexion_at_ic = calc_knee_flexion_at_ic(data, events, side)
+            knee_flexion_rom = calc_knee_flexion_rom(data, events, side)
+
             overstriding = calc_overstriding(data, events, side, parameter="hip")
 
             row_data = {"Heat": heat, "Bib": bib, "Lap": lap_no, "Side": side}
@@ -417,7 +448,9 @@ def calc_kinematic_params(df_events: pd.DataFrame) -> pd.DataFrame:
                          "peak_pelvis_ap_tilt_deg": peak_pelvis_ap_tilt,
                          "neg_peak_pelvis_obliquity_deg": neg_peak_pelvis_obliquity,
                          "hip_flexion_rom_deg": hip_flexion_rom,
-                         "max_knee_flex_stance_deg": max_knee_flex_stance,
+                         "peak_knee_flex_stance_deg": peak_knee_flex_stance,
+                         "knee_flexion_at_ic_deg": knee_flexion_at_ic,
+                         "knee_flexion_rom_deg": knee_flexion_rom,
                          "overstriding_cm": overstriding,
                          })
 

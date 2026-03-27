@@ -1,16 +1,12 @@
-import sys
 import warnings
-from pathlib import Path, PureWindowsPath
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 from scipy.io import loadmat
-from scipy.signal import find_peaks
-import matplotlib.pyplot as plt
-import matplotlib
-import seaborn as sns
 
-from analysis.util import PATH_ROOT, load_events_from_excel, load_result_dataframe, make_file_path, safe_event_dataframe, safe_result_dataframe
+from analysis.util import PATH_ROOT, load_events_from_excel, make_file_path, \
+    safe_result_dataframe, safe_event_dataframe
 from gait_events import get_running_events
 
 
@@ -110,15 +106,16 @@ def calc_vertical_pelvis_movement_sided(data, events, side) -> float:
     if len(ics) == 0 or len(ics_contralateral) == 0:
         warnings.warn(f"No initial contact events found for {side} side or contralateral side.")
         return np.nan
-    print(ics_contralateral)
+    # print(ics_contralateral)
     while ics[0] > ics_contralateral[0]:
         ics_contralateral.pop(0)  # remove the first contralateral IC if it occurs before the first ipsilateral IC
-    print(ics_contralateral)
+    # print(ics_contralateral)
 
     amplitude = []
     for ic, ic_contralateral in zip(ics, ics_contralateral):
         if ic_contralateral - ic < 20:  # if the contralateral IC is too close to the ipsilateral IC, skip this step (probably a detection error)
-            warnings.warn(f"Contralateral IC at frame {ic_contralateral} is too close to ipsilateral IC at frame {ic}, skipping this step.")
+            warnings.warn(
+                f"Contralateral IC at frame {ic_contralateral} is too close to ipsilateral IC at frame {ic}, skipping this step.")
             continue
         step_pelv_motion = pelvis_com_vert_pos[ic:ic_contralateral]
         # plt.plot(step_pelv_motion)
@@ -147,10 +144,7 @@ def calc_overstriding(data, events, side: str, parameter: str) -> float:
         return np.nan
     hip_center_traj = data[f'{side}_Hip_Center'][0][0]
     knee_center_traj = data[f'{side}_Knee_Center'][0][0]
-    if side == "Right":
-        ankle_center_traj = data[f'Rightt_Ankle_Center'][0][0]  # screw you past-dom!
-    else:
-        ankle_center_traj = data[f'{side}_Ankle_Center'][0][0]
+    ankle_center_traj = data[f'{side}_Ankle_Center'][0][0]
     # choose positive values
     hip_ankle_ap_diff = ankle_center_traj[:, 0] - hip_center_traj[:, 0]
     knee_ankle_ap_diff = ankle_center_traj[:, 0] - knee_center_traj[:, 0]
@@ -163,9 +157,9 @@ def calc_overstriding(data, events, side: str, parameter: str) -> float:
         overstriding_ok.append(hip_ankle_ap_diff[ic])
 
     if parameter == "hip":
-        overstriding = overstriding_oh
+        overstriding = overstriding_oh * 100  # convert to cm just for convenience
     elif parameter == "knee":
-        overstriding = overstriding_ok
+        overstriding = overstriding_ok * 100  # convert to cm just for convenience
     else:
         raise ValueError(f"Invalid parameter {parameter} for overstriding calculation. Use 'hip' or 'knee'.")
     return np.mean(overstriding) if len(overstriding) > 0 else np.nan
@@ -190,26 +184,65 @@ def calc_step_rate(events, framerate) -> float:
     return step_rate
 
 
+def calc_contact_time(events_side, frame_rate) -> float:
+    cts = []
+    for ic, to in zip(events_side.get("IC", []), events_side.get("TO", [])):
+        ct = (to - ic) / frame_rate * 1000  # convert to ms
+        cts.append(ct)
+    return np.mean(cts) if len(cts) > 0 else np.nan
+
+
+def calc_flight_time(events_side, frame_rate) -> float:
+    fts = []
+    for to, ic in zip(events_side.get("TO", []), events_side.get("IC", [])[1:]):
+        ft = (ic - to) / frame_rate * 1000
+        fts.append(ft)
+    return np.mean(fts) if len(fts) > 0 else np.nan
+
+
+def calc_step_length(data, events, side ) -> float:
+    # calculate the ap distance between consecutive ipsi-/contralateral foot center positions during stance
+    # at the moment where the foot COM velocity is minimal (mid-stance proxy)
+    foot_pos = data[f"{side}_Foot_COM_Position"][0][0]
+    foot_pos_contralateral = data[f"{'Right' if side == 'Left' else 'Left'}_Foot_COM_Position"][0][0]
+    mid_stance_evt = events.get(side).get("MS", [])
+    mid_stance_evt_contralateral = events.get("Right" if side == "Left" else "Left").get("MS", []).copy()
+    while mid_stance_evt[0] > mid_stance_evt_contralateral[0]:
+        mid_stance_evt_contralateral.pop(0)
+    step_lengths = []
+    for ms, ms_ctl in zip(mid_stance_evt, mid_stance_evt_contralateral):
+        if ms_ctl - ms < 20:
+            warnings.warn(
+                f"Contralateral MS at frame {ms_ctl} is too close to ipsilateral MS at frame {ms}, skipping this step.")
+            continue
+        step_length = foot_pos_contralateral[ms_ctl, 0] - foot_pos[ms, 0]
+        step_lengths.append(step_length)
+    return np.mean(step_lengths) if len(step_lengths) > 0 else np.nan
+
+
+
+
+
 def calc_kinematic_params(df_events: pd.DataFrame) -> pd.DataFrame:
     """
     Calculate biomechanical outcome parameters for each lap based on the detected events and the kinematic data from the .mat files. The parameters include:
-    - Running speed (m/s)
-    - Step rate (steps per minute)
-    - Contact time (ms)  (not implemented yet)
-    - Flight time (ms) (not implemented yet)
+    - Running speed (m/s) ✅
+    - Step rate (steps per minute) ✅
+    - Contact time (ms) ✅
+    - Flight time (ms)  ✅
     - Step length (cm) (not implemented yet)
     - Peak trunk flexion (forward lean) during stance (degrees) (not implemented yet)
-    - Vertical pelvis movement (cm)
-    - Vertical pelvis movement for left and right side separately (cm)
+    - Vertical pelvis movement (cm) ✅
+    - Vertical pelvis movement for left and right side separately (cm) ✅
     - Peal pelvis anterior-posterior tilt during stance (degrees) (not implemented yet)
     - Pelvis rotation range of motion during stance (degrees) (not implemented yet)
     - Pelvis obliquity range of motion during stance (degrees) (not implemented yet)
     - Hip flexion range of motion during stance (degrees) (not implemented yet)
-    - Max knee flexion during stance (degrees)
+    - Max knee flexion during stance (degrees) ✅
     - Knee flexion at initial contact (degrees) (not implemented yet)
     - Knee flexion range of motion during stance (degrees) (not implemented yet)
     - Ankle plantarflexion range of motion during stance (degrees) (not implemented yet)
-    - Overstriding (cm)
+    - Overstriding (cm) ✅
     """
     path_mat_root = Path(PATH_ROOT) / "kinematics" / "mat"
     rows = []
@@ -240,40 +273,34 @@ def calc_kinematic_params(df_events: pd.DataFrame) -> pd.DataFrame:
         #
         #
         sides = ["Left", "Right"]
-        vertical_pelvis_movement_sided = dict().fromkeys(sides, np.nan)
-        max_flex_sided = dict().fromkeys(sides, np.nan)
+
         overstriding = dict().fromkeys(sides, np.nan)
         for side in sides:
-            vertical_pelvis_movement_sided[side] = calc_vertical_pelvis_movement_sided(data, events, side)
-            max_flex_sided[side] = calc_max_knee_flexion(data, events, side)
-            overstriding[side] = calc_overstriding(data, events, side, parameter="hip")
+            events_side = events.get(side)
+            contact_time = calc_contact_time(events_side, framerate)
+            flight_time = calc_flight_time(events_side, framerate)
+            step_length = calc_step_length(data, events, side)
 
-        vertical_pelvis_movement_combined = np.nanmean(list(vertical_pelvis_movement_sided.values())) if len(vertical_pelvis_movement_sided) > 0 else np.nan
-        max_flex_combined = np.nanmean(list(max_flex_sided.values())) if len(max_flex_sided) > 0 else np.nan
-        overstriding_combined = np.nanmean(list(overstriding.values())) if len(overstriding) > 0 else np.nan
+            vertical_pelvis_movement = calc_vertical_pelvis_movement_sided(data, events, side)
+            max_knee_flex_stance = calc_max_knee_flexion(data, events, side)
+            overstriding = calc_overstriding(data, events, side, parameter="hip")
 
-        vertical_pelvis_movement_params = {"vertical_pelvis_movement_combined": vertical_pelvis_movement_combined,
-                                           "vertical_pelvis_movement_left": vertical_pelvis_movement_sided.get("Left", np.nan),
-                                           "vertical_pelvis_movement_right": vertical_pelvis_movement_sided.get("Right", np.nan)}
-        knee_params = {"max_knee_flexion_combined": max_flex_combined,
-                       "max_knee_flexion_left": max_flex_sided.get("Left", np.nan),
-                       "max_knee_flexion_right": max_flex_sided.get("Right", np.nan)}
-        overstriding_params = {"overstriding_combined": overstriding_combined,
-                               "overstriding_left": overstriding.get("Left", np.nan),
-                               "overstriding_right": overstriding.get("Right", np.nan)}
+            row_data = {"Heat": heat, "Bib": bib, "Lap": lap_no, "Side": side}
 
-        row_data = {"Heat": heat, "Bib": bib, "Lap": lap_no}
-
-        rows.append({**row_data,
-                     "running_speed_ms": running_speed_ms,
-                     "step_rate": step_rate,
-                     **vertical_pelvis_movement_params,
-                     **knee_params,
-                     **overstriding_params,
-                     })
+            rows.append({**row_data,
+                         "running_speed_ms": running_speed_ms,
+                         # just duplicate the running speed for both sides for easier analysis later, even though it's not a sided parameter
+                         "step_rate_spm": step_rate,  # same here
+                         "contact_time_ms": contact_time,
+                         "flight_time_ms": flight_time,
+                         "step_length_m": step_length,
+                         "vertical_pelvis_movement_cm": vertical_pelvis_movement,
+                         "max_knee_flex_stance_deg": max_knee_flex_stance,
+                         "overstriding_cm": overstriding,
+                         })
 
     df_kinematic_params = pd.DataFrame(rows)
-    df_kinematic_params.sort_values(by=["Heat", "Bib", "Lap"], inplace=True)
+    df_kinematic_params.sort_values(by=["Heat", "Bib", "Lap", "Side"], inplace=True)
     df_kinematic_params.reset_index(drop=True, inplace=True)
     return df_kinematic_params
 

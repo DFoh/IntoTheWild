@@ -120,7 +120,50 @@ def plot_parameter_over_laps(df, parameter_name, y_label):
     plt.close()
 
 
+def plot_parameter_over_laps_subject_wise(df, parameter_name, y_label):
+    path_plot = Path(PATH_ROOT) / "kinematics" / "plots" / "parameters_over_laps_subject_wise"
+    path_plot.mkdir(parents=True, exist_ok=True)
+    # average for each lap and bib for left and right side
+    bibs = df["Bib"].unique()
+    for bib in bibs:
+        df_bib = df[df["Bib"] == bib]
+        sns.lineplot(data=df_bib, x="Lap", y=parameter_name, hue="Side", estimator=None, marker='o')
+        plt.title(f"{y_label} over Laps (Bib {bib})")
+        path_plot_bib = path_plot / f"{bib}"
+        path_plot_bib.mkdir(parents=True, exist_ok=True)
+        plt.savefig(path_plot_bib / f"{parameter_name}_vs_laps_indiv.png")
+        plt.close()
+        # sns.lineplot(data=df, x="Lap", y=parameter_name, hue="Heat", marker='o')
+        # plt.title(f"{y_label} over Laps (average)")
+        # plt.savefig(path_plot / f"{parameter_name}_vs_laps_avg.png")
+        # plt.close()
+
+
+def plot_parameter_over_laps_heat_wise(df, parameter_name, y_label):
+    path_plot = Path(PATH_ROOT) / "kinematics" / "plots" / "parameters_over_laps_heat_wise"
+    path_plot.mkdir(parents=True, exist_ok=True)
+    heats = df["Heat"].unique()
+    df = df.groupby(["Heat", "Bib", "Lap"]).mean(numeric_only=True).reset_index()
+
+    for heat in heats:
+        df_heat = df[df["Heat"] == heat]
+        df_heat["Bib"] = df_heat["Bib"].astype(str)
+        sns.lineplot(data=df_heat, x="Lap", y=parameter_name, hue="Bib", estimator=None, marker='o')
+        plt.title(f"{y_label} over Laps ({heat})")
+        # place the legend right outside the plot
+        plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+
+        path_plot_heat = path_plot / f"{heat}"
+        path_plot_heat.mkdir(parents=True, exist_ok=True)
+        plt.tight_layout()
+        plt.savefig(path_plot_heat / f"{parameter_name}_vs_laps_indiv.png")
+        plt.close()
+
+
 def main():
+    # df_events = load_events_from_excel()
+    # plot_raw_data_subject_wise(df_events)
+    # return
     df_kinematic_params = load_result_dataframe("kinematic_params.xlsx")
     param_names = [
         ("running_speed_ms", "Running Speed (m/s)"),
@@ -142,6 +185,49 @@ def main():
     ]
     for param_name, y_label in param_names:
         plot_parameter_over_laps(df_kinematic_params, param_name, y_label)
+        # plot_parameter_over_laps_subject_wise(df_kinematic_params, param_name, y_label)
+        # plot_parameter_over_laps_heat_wise(df_kinematic_params, param_name, y_label)
+
+
+def plot_raw_data_subject_wise(df_events: pd.DataFrame):
+    path_mat_root = Path(PATH_ROOT) / "kinematics" / "mat"
+    path_plot = Path(PATH_ROOT) / "kinematics" / "plots" / "raw_data_subject_wise"
+    path_plot.mkdir(parents=True, exist_ok=True)
+
+    for index, row in df_events.iterrows():
+        heat = row["Heat"]
+        bib = row["Bib"]
+        lap_no = row["Lap"]
+        file_path = make_file_path(path_mat_root, heat, bib, lap_no)
+        print(f"Processing lap {lap_no} from file {file_path.name}...")
+        if not file_path.exists():
+            warnings.warn(f"File {file_path} does not exist, skipping...")
+            continue
+        data = loadmat(str(file_path))
+
+        fig, axs = plt.subplots(nrows=4, ncols=2, figsize=(12, 8))
+        params = ["Left_Hip_Center", "Right_Hip_Center", "Left_Knee_Center", "Right_Knee_Center", "Left_Ankle_Center",
+                  "Right_Ankle_Center"]
+        for p, param in enumerate(params):
+            traj = data[param][0][0]
+            ax = axs.flatten()[p % 6 + 2]
+            ax.plot(traj[:, 0], label="X")
+            ax.plot(traj[:, 1], label="Y")
+            ax.plot(traj[:, 2], label="Z")
+            ax.set_title(param)
+            ax.legend()
+        # add pelvis COM trajectory to top row
+        try:
+            pelvis_com_traj = data["Pelvis_COM_Position"][0][0]
+            ax = axs.flatten()[0]
+            ax.plot(pelvis_com_traj[:, 0], label="X")
+            ax.plot(pelvis_com_traj[:, 1], label="Y")
+            ax.plot(pelvis_com_traj[:, 2], label="Z")
+        except KeyError as e:
+            warnings.warn(f"Pelvis_COM_Position not found in {file_path.name}, skipping pelvis COM plot.")
+        fig.suptitle(f"Bib {bib} - Raw Trajectories")
+        plt.savefig(path_plot / f"{bib}_lap{lap_no}_raw_trajectories.png")
+        plt.close()
 
 
 if __name__ == '__main__':

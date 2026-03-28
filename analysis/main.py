@@ -6,7 +6,7 @@ import pandas as pd
 from scipy.io import loadmat
 
 from analysis.util import PATH_ROOT, load_events_from_excel, make_file_path, \
-    safe_result_dataframe
+    safe_result_dataframe, load_result_dataframe
 from gait_events import get_running_events
 
 
@@ -390,8 +390,8 @@ def calc_kinematic_params(df_events: pd.DataFrame) -> pd.DataFrame:
     - Max knee flexion during stance (degrees) ✅
     - Knee flexion at initial contact (degrees) ✅
     - Knee flexion range of motion during stance (degrees) ✅
-    - Ankle plantarflexion at initial contact (degrees) (not implemented yet)
-    - Ankle flexion range of motion during stance (degrees) (not implemented yet)
+    - Ankle plantarflexion at initial contact (degrees)  ✅
+    - Ankle flexion range of motion during stance (degrees) ✅
     - Overstriding (cm) ✅
     """
     path_mat_root = Path(PATH_ROOT) / "kinematics" / "mat"
@@ -478,6 +478,29 @@ def calc_kinematic_params(df_events: pd.DataFrame) -> pd.DataFrame:
     return df_kinematic_params
 
 
+def remove_outliers(df: pd.DataFrame, z_thresh: float = 3.0) -> pd.DataFrame:
+    """
+    Remove outliers from the dataframe based on visual inspection of the data.
+
+    """
+    outliers = [
+        (183, 11, "faulty gait events"),
+        (186, 3, "unsteady trajectories"),
+        (222, 1, "unsteady trajectories"),
+        (225, 6, "gap in trajectories"),
+        (245, 1, "gap in trajectories"),
+        (277, 6, "gap in trajectories"),
+        (280, 11, "gap in trajectories"),
+        (360, 12, "unsteady trajectories"),
+    ]
+
+    for bib, lap, reason in outliers:
+        print(f"Removing outlier for Bib {bib}, Lap {lap} due to {reason}")
+        df = df[~((df["Bib"] == bib) & (df["Lap"] == lap))]
+
+    return df
+
+
 if __name__ == '__main__':
     path_mat_root = Path(PATH_ROOT) / "kinematics" / "mat"
     heat_directories = [d for d in path_mat_root.iterdir() if d.is_dir()]
@@ -502,4 +525,6 @@ if __name__ == '__main__':
     # print(events.head())
 
     df_kinematic_params = calc_kinematic_params(df_events)
+    # df_kinematic_params = load_result_dataframe("kinematic_params.xlsx")
+    df_kinematic_params = remove_outliers(df_kinematic_params)
     safe_result_dataframe(df_kinematic_params, "kinematic_params.xlsx")

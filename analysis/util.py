@@ -1,7 +1,8 @@
 import sys
-import pandas as pd
 import warnings
 from pathlib import Path
+
+import pandas as pd
 
 # for Windows:
 PATH_ROOT_WIN = r"C:\Users\dominik.fohrmann\OneDrive - MSH Medical School Hamburg - University of Applied Sciences and Medical University\Dokumente\Projects\IntoTheWild\data\TrackGrandPrix"
@@ -66,6 +67,55 @@ def load_events_from_excel() -> pd.DataFrame:
     except Exception as e:
         warnings.warn(f"Could not load events from Excel file: {e}")
         return pd.DataFrame(columns=["Heat", "Bib", "Lap", "Events"])
+
+
+def load_demographics_raw_data():
+    path_demo = Path(PATH_ROOT) / "demographics.xlsx"
+    if not path_demo.exists():
+        raise FileNotFoundError(f"File {path_demo} not found")
+    df_demo = pd.read_excel(path_demo)
+    columns_of_interest = ["Bib", "participant_id", "age", "sex", "body_mass_kg", "height_cm", "finish_time_s",
+                           "avg_speed_m_s"]
+    df_out = df_demo[columns_of_interest].copy()
+    df_out.sort_values("Bib", inplace=True)
+    df_out.reset_index(drop=True, inplace=True)
+    return df_out
+
+
+def save_merged_dataframe(df_merged: pd.DataFrame):
+    path_merged = Path(PATH_ROOT) / "merged_data.xlsx"
+    try:
+        df_merged.to_excel(path_merged, index=False)
+        print(f"Merged data saved to {path_merged}")
+    except Exception as e:
+        warnings.warn(f"Could not save merged data to Excel file: {e}")
+
+
+def load_merged_dataframe() -> pd.DataFrame:
+    path_merged = Path(PATH_ROOT) / "merged_data.xlsx"
+    if not path_merged.exists():
+        raise FileNotFoundError(f"File {path_merged} not found")
+    df_merged = pd.read_excel(path_merged)
+    print(f"Merged data loaded from {path_merged}")
+    return df_merged
+
+
+def save_cleaned_demographics_data(df_demo: pd.DataFrame):
+    path_demo_cleaned = Path(PATH_ROOT) / "demographics_cleaned.xlsx"
+    try:
+        df_demo.to_excel(path_demo_cleaned, index=False)
+        print(f"Cleaned demographics data saved to {path_demo_cleaned}")
+    except Exception as e:
+        warnings.warn(f"Could not save cleaned demographics data to Excel file: {e}")
+
+
+def load_cleaned_demographics_data() -> pd.DataFrame:
+    path_demo_cleaned = Path(PATH_ROOT) / "demographics_cleaned.xlsx"
+    if not path_demo_cleaned.exists():
+        raise FileNotFoundError(f"File {path_demo_cleaned} not found")
+    df_demo = pd.read_excel(path_demo_cleaned)
+    print(f"Cleaned demographics data loaded from {path_demo_cleaned}")
+    return df_demo
 
 
 def make_file_path(path_mat_root: Path, heat: str, bib_number: int, lap_no: int) -> Path:

@@ -1,35 +1,22 @@
-import warnings
-from pathlib import Path
-
 import pandas as pd
 
-from analysis.util import load_result_dataframe, PATH_ROOT
+from analysis.util import load_result_dataframe, load_demographics_raw_data, save_cleaned_demographics_data, \
+    save_merged_dataframe
 
 
-def get_demographics_data():
-    path_demo = Path(PATH_ROOT) / "demographics.xlsx"
-    if not path_demo.exists():
-        raise FileNotFoundError(f"File {path_demo} not found")
-    df_demo = pd.read_excel(path_demo)
-    columns_of_interest = ["Bib", "participant_id", "age", "sex", "body_mass_kg", "height_cm", "finish_time_s", "avg_speed_m_s"]
-    df_out = df_demo[columns_of_interest].copy()
-    df_out.sort_values("Bib", inplace=True)
-    df_out.reset_index(drop=True, inplace=True)
-    return df_out
-
-
-def df_remove_dnfers(df: pd.DataFrame)-> pd.DataFrame:
+def df_remove_dnfers(df: pd.DataFrame) -> pd.DataFrame:
     # Remove rows where "finish_time_s" is NaN or where "avg_speed_m_s" is NaN
     df_cleaned = df.dropna(subset=["finish_time_s", "avg_speed_m_s"])
     num_removed = len(df) - len(df_cleaned)
     print(f"Removed {num_removed} DNFers from the dataset")
     return df_cleaned
 
+
 if __name__ == '__main__':
     # Whether or not to remove DNFers from the merged dataset. This will remove all rows where "finish_time_s" is NaN or where "avg_speed_m_s" is NaN.
     remove_dnfers = True
     df_kinematics = load_result_dataframe("kinematic_params.xlsx")
-    df_demographics = get_demographics_data()
+    df_demographics = load_demographics_raw_data()
     bibs_demo = set(df_demographics["Bib"])
     bibs_kinematics = set(df_kinematics["Bib"])
     print(f"Found {len(bibs_demo)} bibs in demographics and {len(bibs_kinematics)} bibs in kinematics")
@@ -41,17 +28,16 @@ if __name__ == '__main__':
     print(f"Finally including {len(bibs_resulting)} bibs in the merged dataset")
     df_merged = pd.merge(df_kinematics, df_demographics, on="Bib", how="inner")
     foo = 1
-    df_demo_reduced = df_demographics[df_demographics["Bib"].isin(bibs_resulting)].copy()
-    df_demo_reduced.sort_values("Bib", inplace=True)
-    df_demo_reduced.reset_index(drop=True, inplace=True)
+    df_demo_cleaned = df_demographics[df_demographics["Bib"].isin(bibs_resulting)].copy()
+    df_demo_cleaned.sort_values("Bib", inplace=True)
+    df_demo_cleaned.reset_index(drop=True, inplace=True)
     df_merged_bibs = df_merged["Bib"].unique().tolist()
     df_merged_bibs.sort()
-    assert df_demo_reduced["Bib"].tolist() == df_merged_bibs, "Bibs do not match after merge"
+    assert df_demo_cleaned["Bib"].tolist() == df_merged_bibs, "Bibs do not match after merge"
     if remove_dnfers:
-        df_demo_reduced = df_remove_dnfers(df_demo_reduced)
-        bibs_reduced = set(df_demo_reduced["Bib"])
-        df_merged = df_merged[df_merged["Bib"].isin(bibs_reduced)].copy()
+        df_demo_cleaned = df_remove_dnfers(df_demo_cleaned)
+        bibs_cleaned = set(df_demo_cleaned["Bib"])
+        df_merged = df_merged[df_merged["Bib"].isin(bibs_cleaned)].copy()
 
-    df_merged.to_excel(Path(PATH_ROOT) / "merged_data.xlsx", index=False)
-    df_demo_reduced.to_excel(Path(PATH_ROOT) / "demographics_reduced.xlsx", index=False)
-
+    save_merged_dataframe(df_merged)
+    save_cleaned_demographics_data(df_demo_cleaned)

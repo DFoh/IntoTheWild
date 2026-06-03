@@ -160,7 +160,7 @@ def get_mid_stance_proxy_events(foot_vel, events) -> list:
     mss = []
     for ic, to in zip(ics, tos):
         ms = ic + np.argmin(foot_vel_res[ic:to])
-        mss.append(ms)
+        mss.append(int(ms))
     return mss
 
 def get_running_events(data):

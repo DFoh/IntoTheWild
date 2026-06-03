@@ -8,9 +8,8 @@ import pandas as pd
 from labtools.batch_processor import BatchProcessor
 from scipy.io import loadmat
 
-from analysis.util import get_participant_data, load_events_from_excel, load_path_root, make_file_path, safe_event_dataframe, safe_result_dataframe
-from analysis.util import load_events_from_excel, make_file_path, \
-    safe_result_dataframe, load_result_dataframe
+from analysis.util import get_participant_data, load_path_root, safe_event_dataframe
+from analysis.util import load_events_from_excel, safe_result_dataframe
 from gait_events import get_running_events
 
 
@@ -398,7 +397,6 @@ def calc_kinematic_params(row: pd.Series, df_events: pd.DataFrame) -> dict | Non
     - Ankle flexion range of motion during stance (degrees) ✅
     - Overstriding (cm) ✅
     """
-    heat = row["Heat"]
     bib = int(row["Bib"])
     lap_no = int(row["Lap"].split("_")[2])
     df_events["Bib"] = df_events["Bib"].astype(int)
@@ -419,8 +417,10 @@ def calc_kinematic_params(row: pd.Series, df_events: pd.DataFrame) -> dict | Non
     # Sided params:
     #
     #
+    out = dict()
     sides = ["Left", "Right"]
     for side in sides:
+        out.update({side: dict()})
         events_side = events.get(side)
         contact_time = calc_contact_time(events_side, framerate)
         flight_time = calc_flight_time(events_side, framerate)
@@ -446,28 +446,33 @@ def calc_kinematic_params(row: pd.Series, df_events: pd.DataFrame) -> dict | Non
 
         overstriding = calc_overstriding(data, events, side, parameter="hip")
 
-        row_data = {"Heat": heat, "Bib": bib, "Lap": lap_no, "Side": side}
-
-        return {**row_data,
-                "running_speed_ms": running_speed_ms,
-                # just duplicate the running speed for both sides for easier analysis later, even though it's not a sided parameter
-                "step_rate_spm": step_rate,  # same here
-                "contact_time_ms": contact_time,
-                "flight_time_ms": flight_time,
-                "step_length_m": step_length,
-                "trunk_flexion_deg": peak_trunk_flexion,
-                "vertical_pelvis_movement_cm": vertical_pelvis_movement,
-                "peak_pelvis_ap_tilt_deg": peak_pelvis_ap_tilt,
-                "neg_peak_pelvis_obliquity_deg": neg_peak_pelvis_obliquity,
-                "hip_flexion_rom_deg": hip_flexion_rom,
-                "peak_knee_flex_stance_deg": peak_knee_flex_stance,
-                "knee_flexion_at_ic_deg": knee_flexion_at_ic,
-                "knee_flexion_rom_deg": knee_flexion_rom,
-                "ankle_flexion_at_ic_deg": ankle_flexion_at_ic,
-                "ankle_flexion_rom_deg": ankle_flexion_rom,
-                "ankle_dorsiflexion_max_deg": ankle_flexion_max,
-                "overstriding_cm": overstriding,
-                }
+        out[side].update({
+            "running_speed_ms": running_speed_ms,
+            # just duplicate the running speed for both sides for easier analysis later, even though it's not a sided parameter
+            "step_rate_spm": step_rate,  # same here
+            "contact_time_ms": contact_time,
+            "flight_time_ms": flight_time,
+            "step_length_m": step_length,
+            "trunk_flexion_deg": peak_trunk_flexion,
+            "vertical_pelvis_movement_cm": vertical_pelvis_movement,
+            "peak_pelvis_ap_tilt_deg": peak_pelvis_ap_tilt,
+            "neg_peak_pelvis_obliquity_deg": neg_peak_pelvis_obliquity,
+            "hip_flexion_rom_deg": hip_flexion_rom,
+            "peak_knee_flex_stance_deg": peak_knee_flex_stance,
+            "knee_flexion_at_ic_deg": knee_flexion_at_ic,
+            "knee_flexion_rom_deg": knee_flexion_rom,
+            "ankle_flexion_at_ic_deg": ankle_flexion_at_ic,
+            "ankle_flexion_rom_deg": ankle_flexion_rom,
+            "ankle_dorsiflexion_max_deg": ankle_flexion_max,
+            "overstriding_cm": overstriding,
+        })
+    # invert hierarchy (side->param to param->side)
+    d = defaultdict(dict)
+    for a, b in out.items():
+        for c, _d in b.items():
+            d[c][a] = _d
+    out = dict(d)
+    return out
 
 
 def event_dict_from_row(row: pd.Series, bib: int, lap_no: int) -> dict | None:
@@ -477,7 +482,7 @@ def event_dict_from_row(row: pd.Series, bib: int, lap_no: int) -> dict | None:
 
     row = lap_events.iloc[0]
     events = defaultdict(lambda: defaultdict(list))
-    for col in ["Left.IC", "Left.TO", "Right.IC", "Right.TO"]:
+    for col in ["Left.IC", "Left.MS", "Left.TO", "Right.IC", "Right.MS", "Right.TO"]:
         side, evt = col.split(".")
         events[side][evt] = ast.literal_eval(row[col])
     events = {side: dict(evts) for side, evts in events.items()}
@@ -548,7 +553,8 @@ if __name__ == '__main__':
 
     df_kinematic_params = pd.json_normalize(res_kin)
     df_kinematic_params = pd.concat([bp.index.reset_index(drop=True), df_kinematic_params], axis=1)
-    df_kinematic_params["Lap"] = df_kinematic_params["Lap"].apply(lambda x: x.split("_")[2])
+    df_kinematic_params["Lap"] = df_kinematic_params["Lap"].apply(lambda x: int(x.split("_")[2]))
+    df_kinematic_params.sort_values(["Heat", "Bib","Lap"], inplace=True)
 
     #
     #

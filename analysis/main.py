@@ -1,11 +1,15 @@
+import ast
 import warnings
+from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from labtools.batch_processor import BatchProcessor
 from scipy.io import loadmat
 
-from analysis.util import PATH_ROOT, load_events_from_excel, make_file_path, \
+from analysis.util import get_participant_data, load_events_from_excel, load_path_root, make_file_path, safe_event_dataframe, safe_result_dataframe
+from analysis.util import load_events_from_excel, make_file_path, \
     safe_result_dataframe, load_result_dataframe
 from gait_events import get_running_events
 
@@ -372,7 +376,7 @@ def calc_hip_flexion_rom(data, events, side) -> float:
     return np.mean(flexions) if len(flexions) > 0 else np.nan
 
 
-def calc_kinematic_params(df_events: pd.DataFrame) -> pd.DataFrame:
+def calc_kinematic_params(row: pd.Series, df_events: pd.DataFrame) -> dict | None:
     """
     Calculate biomechanical outcome parameters for each lap based on the detected events and the kinematic data from the .mat files. The parameters include:
     - Running speed (m/s) ✅
@@ -394,88 +398,103 @@ def calc_kinematic_params(df_events: pd.DataFrame) -> pd.DataFrame:
     - Ankle flexion range of motion during stance (degrees) ✅
     - Overstriding (cm) ✅
     """
-    path_mat_root = Path(PATH_ROOT) / "kinematics" / "mat"
-    rows = []
-    for index, row in df_events.iterrows():
-        heat = row["Heat"]
-        bib = row["Bib"]
-        lap_no = row["Lap"]
-        events = row["Events"]
-        if events is None or not isinstance(events, dict):
-            continue
-        file_path = make_file_path(path_mat_root, heat, bib, lap_no)
-        print(f"Processing lap {lap_no} from file {file_path.name}...")
-        if not file_path.exists():
-            warnings.warn(f"File {file_path} does not exist, skipping...")
-            continue
-        data = loadmat(str(file_path))
-        framerate = data['FRAME_RATE'][0][0][0][0]
-        #
-        #
-        # Single value params
-        #
-        #
-        running_speed_ms = calc_running_speed(data)
-        step_rate = calc_step_rate(events, framerate)
-        #
-        #
-        # Sided params:
-        #
-        #
-        sides = ["Left", "Right"]
-        for side in sides:
-            events_side = events.get(side)
-            contact_time = calc_contact_time(events_side, framerate)
-            flight_time = calc_flight_time(events_side, framerate)
-            step_length = calc_step_length(data, events, side)
-            peak_trunk_flexion = calc_trunk_flexion(data, events, side)
-            # Pelvis Parameters
-            vertical_pelvis_movement = calc_vertical_pelvis_movement_sided(data, events, side)
-            peak_pelvis_ap_tilt = calc_peak_pelvis_ap_tilt(data, events, side)
-            neg_peak_pelvis_obliquity = calc_peak_pelvis_obliquity(data, events, side)
-            pelvis_rotation_rom = calc_pelvis_rotation_rom(data, events, side)
-            # Hip
-            hip_flexion_rom = calc_hip_flexion_rom(data, events, side)
-            # Knee
-            knee_metrics = calc_knee_flexion_metrics(data, events, side)
-            peak_knee_flex_stance = knee_metrics.get("knee_flex_max")
-            knee_flexion_at_ic = knee_metrics.get("knee_flex_at_ic")
-            knee_flexion_rom = knee_metrics.get("knee_flex_rom")
-            # Ankle
-            ankle_metrics = calc_ankle_flexion_metrics(data, events, side)
-            ankle_flexion_at_ic = ankle_metrics.get("ankle_flex_at_ic")
-            ankle_flexion_rom = ankle_metrics.get("ankle_flex_rom")
-            ankle_flexion_max = ankle_metrics.get("ankle_flex_max")
+    heat = row["Heat"]
+    bib = int(row["Bib"])
+    lap_no = int(row["Lap"].split("_")[2])
+    df_events["Bib"] = df_events["Bib"].astype(int)
+    df_events["Lap"] = df_events["Lap"].astype(int)
+    events = event_dict_from_row(row, bib, lap_no)
 
-            overstriding = calc_overstriding(data, events, side, parameter="hip")
+    data = loadmat(row.path)
+    framerate = data['FRAME_RATE'][0][0][0][0]
+    #
+    #
+    # Single value params
+    #
+    #
+    running_speed_ms = calc_running_speed(data)
+    step_rate = calc_step_rate(events, framerate)
+    #
+    #
+    # Sided params:
+    #
+    #
+    sides = ["Left", "Right"]
+    for side in sides:
+        events_side = events.get(side)
+        contact_time = calc_contact_time(events_side, framerate)
+        flight_time = calc_flight_time(events_side, framerate)
+        step_length = calc_step_length(data, events, side)
+        peak_trunk_flexion = calc_trunk_flexion(data, events, side)
+        # Pelvis Parameters
+        vertical_pelvis_movement = calc_vertical_pelvis_movement_sided(data, events, side)
+        peak_pelvis_ap_tilt = calc_peak_pelvis_ap_tilt(data, events, side)
+        neg_peak_pelvis_obliquity = calc_peak_pelvis_obliquity(data, events, side)
+        pelvis_rotation_rom = calc_pelvis_rotation_rom(data, events, side)
+        # Hip
+        hip_flexion_rom = calc_hip_flexion_rom(data, events, side)
+        # Knee
+        knee_metrics = calc_knee_flexion_metrics(data, events, side)
+        peak_knee_flex_stance = knee_metrics.get("knee_flex_max")
+        knee_flexion_at_ic = knee_metrics.get("knee_flex_at_ic")
+        knee_flexion_rom = knee_metrics.get("knee_flex_rom")
+        # Ankle
+        ankle_metrics = calc_ankle_flexion_metrics(data, events, side)
+        ankle_flexion_at_ic = ankle_metrics.get("ankle_flex_at_ic")
+        ankle_flexion_rom = ankle_metrics.get("ankle_flex_rom")
+        ankle_flexion_max = ankle_metrics.get("ankle_flex_max")
 
-            row_data = {"Heat": heat, "Bib": bib, "Lap": lap_no, "Side": side}
+        overstriding = calc_overstriding(data, events, side, parameter="hip")
 
-            rows.append({**row_data,
-                         "running_speed_ms": running_speed_ms,
-                         # just duplicate the running speed for both sides for easier analysis later, even though it's not a sided parameter
-                         "step_rate_spm": step_rate,  # same here
-                         "contact_time_ms": contact_time,
-                         "flight_time_ms": flight_time,
-                         "step_length_m": step_length,
-                         "trunk_flexion_deg": peak_trunk_flexion,
-                         "vertical_pelvis_movement_cm": vertical_pelvis_movement,
-                         "peak_pelvis_ap_tilt_deg": peak_pelvis_ap_tilt,
-                         "neg_peak_pelvis_obliquity_deg": neg_peak_pelvis_obliquity,
-                         "hip_flexion_rom_deg": hip_flexion_rom,
-                         "peak_knee_flex_stance_deg": peak_knee_flex_stance,
-                         "knee_flexion_at_ic_deg": knee_flexion_at_ic,
-                         "knee_flexion_rom_deg": knee_flexion_rom,
-                         "ankle_flexion_at_ic_deg": ankle_flexion_at_ic,
-                         "ankle_flexion_rom_deg": ankle_flexion_rom,
-                         "ankle_dorsiflexion_max_deg": ankle_flexion_max,
-                         "overstriding_cm": overstriding,
-                         })
+        row_data = {"Heat": heat, "Bib": bib, "Lap": lap_no, "Side": side}
 
-    df_kinematic_params = pd.DataFrame(rows)
-    df_kinematic_params.sort_values(by=["Heat", "Bib", "Lap", "Side"], inplace=True)
-    df_kinematic_params.reset_index(drop=True, inplace=True)
-    return df_kinematic_params
+        return {**row_data,
+                "running_speed_ms": running_speed_ms,
+                # just duplicate the running speed for both sides for easier analysis later, even though it's not a sided parameter
+                "step_rate_spm": step_rate,  # same here
+                "contact_time_ms": contact_time,
+                "flight_time_ms": flight_time,
+                "step_length_m": step_length,
+                "trunk_flexion_deg": peak_trunk_flexion,
+                "vertical_pelvis_movement_cm": vertical_pelvis_movement,
+                "peak_pelvis_ap_tilt_deg": peak_pelvis_ap_tilt,
+                "neg_peak_pelvis_obliquity_deg": neg_peak_pelvis_obliquity,
+                "hip_flexion_rom_deg": hip_flexion_rom,
+                "peak_knee_flex_stance_deg": peak_knee_flex_stance,
+                "knee_flexion_at_ic_deg": knee_flexion_at_ic,
+                "knee_flexion_rom_deg": knee_flexion_rom,
+                "ankle_flexion_at_ic_deg": ankle_flexion_at_ic,
+                "ankle_flexion_rom_deg": ankle_flexion_rom,
+                "ankle_dorsiflexion_max_deg": ankle_flexion_max,
+                "overstriding_cm": overstriding,
+                }
+
+
+def event_dict_from_row(row: pd.Series, bib: int, lap_no: int) -> dict | None:
+    lap_events = df_events[(df_events["Bib"] == bib) & (df_events["Lap"] == lap_no)]
+    if pd.isna(lap_events["Left.IC"].values):
+        return None
+
+    row = lap_events.iloc[0]
+    events = defaultdict(lambda: defaultdict(list))
+    for col in ["Left.IC", "Left.TO", "Right.IC", "Right.TO"]:
+        side, evt = col.split(".")
+        events[side][evt] = ast.literal_eval(row[col])
+    events = {side: dict(evts) for side, evts in events.items()}
+    return events
+
+
+def events_processor(row: pd.Series, df_demographics: pd.DataFrame) -> dict | None:
+    if not {"Heat", "Bib", "Lap", "path"}.issubset(row.index):
+        return None
+    if "_filt" not in row.Lap:
+        return None
+    bib = int(row.Bib)
+    df_sub = df_demographics[df_demographics["start_number"] == bib]
+    if df_sub.empty:
+        return None
+    events = get_events(row.path)
+    return events
 
 
 def remove_outliers(df: pd.DataFrame, z_thresh: float = 3.0) -> pd.DataFrame:
@@ -502,16 +521,34 @@ def remove_outliers(df: pd.DataFrame, z_thresh: float = 3.0) -> pd.DataFrame:
 
 
 if __name__ == '__main__':
-    path_mat_root = Path(PATH_ROOT) / "kinematics" / "mat"
-    heat_directories = [d for d in path_mat_root.iterdir() if d.is_dir()]
-    heat_directories.sort()
-    heats = [d.name for d in heat_directories]
-    laps = list(range(1, 14))
+    recalc_events = False
+    path_root = load_path_root()
+    path_mat_root = Path(path_root) / "TrackGrandPrix" / "kinematics" / "mat"
+    bp = BatchProcessor(path_mat_root,
+                        level_names=["Heat", "Bib", "Lap"],
+                        file_pattern="_filt.mat")
 
-    # df_events = calc_events(path_data_root=path_mat_root, heats=heats, laps=laps)
-    # safe_event_dataframe(df_events)
-    #
-    df_events = load_events_from_excel()
+    df_demo = get_participant_data()
+
+    # calculate or load events:
+    if recalc_events:
+        res = bp.apply(events_processor,
+                       multiprocess=False,
+                       df_demographics=df_demo)
+        df_events = pd.json_normalize(res)
+        df_events = pd.concat([bp.index.reset_index(drop=True), df_events], axis=1)
+        df_events["Lap"] = df_events["Lap"].apply(lambda x: x.split("_")[2])
+
+        safe_event_dataframe(df_events)
+    else:
+        df_events = load_events_from_excel()
+
+    res_kin = bp.apply(calc_kinematic_params,
+                       df_events=df_events)
+
+    df_kinematic_params = pd.json_normalize(res_kin)
+    df_kinematic_params = pd.concat([bp.index.reset_index(drop=True), df_kinematic_params], axis=1)
+    df_kinematic_params["Lap"] = df_kinematic_params["Lap"].apply(lambda x: x.split("_")[2])
 
     #
     #
@@ -524,7 +561,6 @@ if __name__ == '__main__':
     # plot_limb_lengths_over_laps(df_limb_lenghts)
     # print(events.head())
 
-    df_kinematic_params = calc_kinematic_params(df_events)
     # df_kinematic_params = load_result_dataframe("kinematic_params.xlsx")
     df_kinematic_params = remove_outliers(df_kinematic_params)
     safe_result_dataframe(df_kinematic_params, "kinematic_params.xlsx")

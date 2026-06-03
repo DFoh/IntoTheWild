@@ -1,24 +1,28 @@
 import sys
+import pandas as pd
 import warnings
 from pathlib import Path
 
-import pandas as pd
+from dotenv import load_dotenv
 
-# for Windows:
-PATH_ROOT_WIN = r"C:\Users\dominik.fohrmann\OneDrive - MSH Medical School Hamburg - University of Applied Sciences and Medical University\Dokumente\Projects\IntoTheWild\data\TrackGrandPrix"
-# for macOS:
-PATH_ROOT_MAC = r"/Users/dominikfohrmann/OneDrive - MSH Medical School Hamburg - University of Applied Sciences and Medical University/Dokumente/Projects/IntoTheWild/data/TrackGrandPrix"
 
-if sys.platform.startswith('win'):
-    PATH_ROOT = PATH_ROOT_WIN
-elif sys.platform.startswith('darwin'):
-    PATH_ROOT = PATH_ROOT_MAC
-else:
-    raise OSError("Unsupported operating system. Please use Windows or macOS.")
+def load_path_root() -> Path:
+    import os
+    load_dotenv()
+    if sys.platform.startswith('win'):
+        p = os.getenv("PATH_ROOT_WIN")
+    elif sys.platform.startswith('darwin'):
+        p = os.getenv("PATH_ROOT_MAC")
+    else:
+        raise OSError("Unsupported operating system. Please use Windows or macOS.")
+    if p is None:
+        raise ValueError("PATH_ROOT not found. Check your .env file and try again.")
+    return Path(p)
 
 
 def get_result_frame_path(filename: str) -> Path:
-    path_safe = Path(PATH_ROOT) / "kinematics" / filename
+    path_root = load_path_root()
+    path_safe = Path(path_root) / "TrackGrandPrix" / "kinematics" / filename
     return path_safe
 
 
@@ -61,7 +65,7 @@ def load_events_from_excel() -> pd.DataFrame:
     try:
         df_events = pd.read_excel(path_safe)
         # parse the "Events" column from string back to dict
-        df_events["Events"] = df_events["Events"].apply(lambda x: eval(x) if isinstance(x, str) else x)
+        # df_events["Events"] = df_events["Events"].apply(lambda x: eval(x) if isinstance(x, str) else x)
         print(f"Events loaded from {path_safe}")
         return df_events
     except Exception as e:
@@ -70,7 +74,8 @@ def load_events_from_excel() -> pd.DataFrame:
 
 
 def load_demographics_raw_data():
-    path_demo = Path(PATH_ROOT) / "demographics.xlsx"
+    path_root = load_path_root()
+    path_demo = Path(path_root) / "demographics.xlsx"
     if not path_demo.exists():
         raise FileNotFoundError(f"File {path_demo} not found")
     df_demo = pd.read_excel(path_demo)
@@ -83,7 +88,9 @@ def load_demographics_raw_data():
 
 
 def save_merged_dataframe(df_merged: pd.DataFrame):
-    path_merged = Path(PATH_ROOT) / "merged_data.xlsx"
+    path_root = load_path_root()
+
+    path_merged = Path(path_root) / "merged_data.xlsx"
     try:
         df_merged.to_excel(path_merged, index=False)
         print(f"Merged data saved to {path_merged}")
@@ -92,7 +99,8 @@ def save_merged_dataframe(df_merged: pd.DataFrame):
 
 
 def load_merged_dataframe() -> pd.DataFrame:
-    path_merged = Path(PATH_ROOT) / "merged_data.xlsx"
+    path_root = load_path_root()
+    path_merged = Path(path_root) / "merged_data.xlsx"
     if not path_merged.exists():
         raise FileNotFoundError(f"File {path_merged} not found")
     df_merged = pd.read_excel(path_merged)
@@ -101,7 +109,8 @@ def load_merged_dataframe() -> pd.DataFrame:
 
 
 def save_cleaned_demographics_data(df_demo: pd.DataFrame):
-    path_demo_cleaned = Path(PATH_ROOT) / "demographics_cleaned.xlsx"
+    path_root = load_path_root()
+    path_demo_cleaned = Path(path_root) / "demographics_cleaned.xlsx"
     try:
         df_demo.to_excel(path_demo_cleaned, index=False)
         print(f"Cleaned demographics data saved to {path_demo_cleaned}")
@@ -110,7 +119,8 @@ def save_cleaned_demographics_data(df_demo: pd.DataFrame):
 
 
 def load_cleaned_demographics_data() -> pd.DataFrame:
-    path_demo_cleaned = Path(PATH_ROOT) / "demographics_cleaned.xlsx"
+    path_root = load_path_root()
+    path_demo_cleaned = Path(path_root) / "demographics_cleaned.xlsx"
     if not path_demo_cleaned.exists():
         raise FileNotFoundError(f"File {path_demo_cleaned} not found")
     df_demo = pd.read_excel(path_demo_cleaned)
@@ -128,3 +138,14 @@ def make_file_path(path_mat_root: Path, heat: str, bib_number: int, lap_no: int)
     """
 
     return path_mat_root / heat / str(bib_number) / f"{bib_number}_lap_{lap_no}_filt.mat"
+
+
+def get_participant_data() -> pd.DataFrame:
+    path_root = load_path_root()
+    path_participant_data = path_root / "into_the_wild_participant_data.xlsx"
+    df_demo = pd.read_excel(path_participant_data)
+    # drop start_number == NaN rows
+    df_demo.dropna(subset=["start_number"], inplace=True)
+    # convert "start_number" column to integer
+    df_demo["start_number"] = df_demo["start_number"].astype(int)
+    return df_demo

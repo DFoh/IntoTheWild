@@ -34,9 +34,6 @@ paths_videos = {
 }
 
 
-def get_participant_data() -> pd.DataFrame:
-    path_participant_data = Path("../data/into_the_wild_participant_data.xlsx")
-    return pd.read_excel(path_participant_data)
 
 
 def get_video_path_by_trial_name_and_camera_id(heat: int, trialname: str, cam_id: str) -> Path:

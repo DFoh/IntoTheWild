@@ -8,7 +8,7 @@ import pandas as pd
 from labtools.batch_processor import BatchProcessor
 from scipy.io import loadmat
 
-from analysis.util import get_participant_data, load_path_root, safe_event_dataframe
+from analysis.util import get_participant_data, load_cleaned_demographics_data, load_path_root, load_result_dataframe, safe_event_dataframe
 from analysis.util import load_events_from_excel, safe_result_dataframe
 from gait_events import get_running_events
 
@@ -375,7 +375,81 @@ def calc_hip_flexion_rom(data, events, side) -> float:
     return np.mean(flexions) if len(flexions) > 0 else np.nan
 
 
-def calc_kinematic_params(row: pd.Series, df_events: pd.DataFrame) -> dict | None:
+def sided_events_to_sequential(sided_events: dict) -> list[tuple]:
+    sequential_events = []
+    for side in sided_events.keys():
+        for event, event_frames in sided_events[side].items():
+            for frame in event_frames:
+                sequential_events.append((frame, side, event))
+    return sorted(sequential_events)
+
+
+def calc_leg_stiffness(data, events, side, bodymass, leg_length) -> float:
+    """
+    Calulate the leg srping stiffness according to Morin et al. (2005): "A Simple Method for Measuring Stiffness during Running"
+    doi:10.1123/jab.21.2.167
+    """
+    # todo: see if per-step speed calculation changes outcome
+    speed_meters_per_second = calc_running_speed(data)
+    sample_rate = data['FRAME_RATE'].item().item()
+
+    sequential_events = sided_events_to_sequential(events)
+    # filter mid-stance events
+    sequential_events = [s for s in sequential_events if s[2] != "MS"]
+    contralateral_side = "Right" if side == "Left" else "Left"
+
+    # to loop over steps, we need the first contralateral toe-off event and the last contralateral initial contact
+    first_contralateral_to = [c_ic for c_ic in sequential_events if (c_ic[1] == contralateral_side) & (c_ic[2] == "TO")][0]
+    last_contralateral_ic = [c_ic for c_ic in sequential_events if (c_ic[1] == contralateral_side) & (c_ic[2] == "IC")][-1]
+    i_first_contralateral_to = sequential_events.index(first_contralateral_to)
+    i_last_contralateral_ic = sequential_events.index(last_contralateral_ic)
+    sequential_events_reduced = sequential_events[i_first_contralateral_to:i_last_contralateral_ic + 1]
+
+    ics = [ic for ic in sequential_events_reduced if (ic[1] == side) & (ic[2] == "IC")]
+    tos = [to for to in sequential_events_reduced if (to[1] == side) & (to[2] == "TO")]
+    k_leg_list = []
+    for ic, to in zip(ics, tos):
+        c_to = sequential_events_reduced[sequential_events_reduced.index(ic) - 1]
+        c_ic = sequential_events_reduced[sequential_events_reduced.index(to) + 1]
+        contact_time = (to[0] - ic[0]) / sample_rate
+        flight_time_previous = (ic[0] - c_to[0]) / sample_rate
+        flight_time_consecutive = (c_ic[0] - to[0]) / sample_rate
+        flight_time = (flight_time_previous + flight_time_consecutive) / 2
+        # modelled maximum ground reaction force
+        # Formula (6) from Morin et al. 2005
+        F_max_modelled = bodymass * 9.81 * np.pi * 0.5 * (flight_time / contact_time + 1)
+        # modelled vertical center of mass displacement
+        # Formula (7) from Morin et al. 2005
+        delta_y_c_modelled = ((F_max_modelled * contact_time ** 2) / (bodymass * np.pi ** 2)) + 9.81 * (contact_time ** 2 / 8)
+        # modelled leg length variation
+        # Formula (9) from Morin et al. 2005
+        delta_L_modelled = leg_length - np.sqrt(leg_length ** 2 - (speed_meters_per_second * contact_time * 0.5) ** 2) + delta_y_c_modelled
+        # ... and the modelled leg stiffness
+        # Formula (8) in Morin
+        k_leg = F_max_modelled / delta_L_modelled  # N/m
+        k_leg_list.append(k_leg)
+    out = np.array(k_leg_list)
+
+    return np.mean(out)
+
+
+def calc_avg_leg_length(df_leg_length, bib) -> dict:
+    means = df_leg_length.loc[df_leg_length["Bib"] == bib, :].mean(numeric_only=True)
+    left_shank = means["avg_shank_length_left"]
+    right_shank = means["avg_shank_length_right"]
+    left_thigh = means["avg_thigh_length_left"]
+    right_thigh = means["avg_thigh_length_right"]
+    return {
+        "Left": left_shank + left_thigh,
+        "Right": right_shank + right_thigh,
+    }
+
+
+def calc_kinematic_params(
+        row: pd.Series,
+        df_events: pd.DataFrame,
+        df_demographics: pd.DataFrame,
+        df_leg_length: pd.DataFrame) -> dict | None:
     """
     Calculate biomechanical outcome parameters for each lap based on the detected events and the kinematic data from the .mat files. The parameters include:
     - Running speed (m/s) ✅
@@ -419,6 +493,8 @@ def calc_kinematic_params(row: pd.Series, df_events: pd.DataFrame) -> dict | Non
     #
     out = dict()
     sides = ["Left", "Right"]
+    leg_lengths = calc_avg_leg_length(df_leg_length, bib)
+    bodymass = df_demographics.loc[df_demographics["Bib"] == bib, "body_mass_kg"].item()
     for side in sides:
         out.update({side: dict()})
         events_side = events.get(side)
@@ -446,6 +522,12 @@ def calc_kinematic_params(row: pd.Series, df_events: pd.DataFrame) -> dict | Non
 
         overstriding = calc_overstriding(data, events, side, parameter="hip")
 
+        # leg spring stiffness
+        if not pd.isna(bodymass):
+            leg_spring_stiffness = calc_leg_stiffness(data, events, side, bodymass, leg_lengths[side])
+        else:
+            leg_spring_stiffness = None
+
         out[side].update({
             "running_speed_ms": running_speed_ms,
             # just duplicate the running speed for both sides for easier analysis later, even though it's not a sided parameter
@@ -465,6 +547,7 @@ def calc_kinematic_params(row: pd.Series, df_events: pd.DataFrame) -> dict | Non
             "ankle_flexion_rom_deg": ankle_flexion_rom,
             "ankle_dorsiflexion_max_deg": ankle_flexion_max,
             "overstriding_cm": overstriding,
+            'leg_spring_stiffness': leg_spring_stiffness,
         })
     # invert hierarchy (side->param to param->side)
     d = defaultdict(dict)
@@ -527,6 +610,7 @@ def remove_outliers(df: pd.DataFrame, z_thresh: float = 3.0) -> pd.DataFrame:
 
 if __name__ == '__main__':
     recalc_events = False
+    recalc_kinematics = False
     path_root = load_path_root()
     path_mat_root = Path(path_root) / "TrackGrandPrix" / "kinematics" / "mat"
     bp = BatchProcessor(path_mat_root,
@@ -548,13 +632,24 @@ if __name__ == '__main__':
     else:
         df_events = load_events_from_excel()
 
-    res_kin = bp.apply(calc_kinematic_params,
-                       df_events=df_events)
+    # get the limb lengths and mass for leg spring stiffness calculations
+    df_limb_lenghts = load_result_dataframe("limb_lenghts.xlsx")
+    df_demographics = load_cleaned_demographics_data()
 
-    df_kinematic_params = pd.json_normalize(res_kin)
-    df_kinematic_params = pd.concat([bp.index.reset_index(drop=True), df_kinematic_params], axis=1)
-    df_kinematic_params["Lap"] = df_kinematic_params["Lap"].apply(lambda x: int(x.split("_")[2]))
-    df_kinematic_params.sort_values(["Heat", "Bib","Lap"], inplace=True)
+    if recalc_kinematics:
+
+        res_kin = bp.apply(calc_kinematic_params,
+                           df_events=df_events,
+                           df_demographics=df_demographics,
+                           df_leg_length=df_limb_lenghts)
+
+        df_kinematic_params = pd.json_normalize(res_kin)
+        df_kinematic_params = pd.concat([bp.index.reset_index(drop=True), df_kinematic_params], axis=1)
+        df_kinematic_params["Lap"] = df_kinematic_params["Lap"].apply(lambda x: int(x.split("_")[2]))
+        df_kinematic_params.sort_values(["Heat", "Bib", "Lap"], inplace=True)
+    else:
+        df_kinematic_params = load_result_dataframe("kinematic_params.xlsx")
+    df_kinematic_params = remove_outliers(df_kinematic_params)
 
     #
     #
@@ -563,10 +658,21 @@ if __name__ == '__main__':
     #
 
     # data_check(events)
-    # df_limb_lenghts = load_result_dataframe("limb_lenghts.xlsx")
     # plot_limb_lengths_over_laps(df_limb_lenghts)
     # print(events.head())
 
-    # df_kinematic_params = load_result_dataframe("kinematic_params.xlsx")
-    df_kinematic_params = remove_outliers(df_kinematic_params)
-    safe_result_dataframe(df_kinematic_params, "kinematic_params.xlsx")
+    if recalc_kinematics:
+        safe_result_dataframe(df_kinematic_params, "kinematic_params.xlsx")
+    # reformat dataframe so there are no sided-columns, but a column "side" instead (long format)
+    df_kinematic_params.drop(["path"], axis=1, inplace=True)
+
+    id_cols = ["Heat", "Bib", "Lap"]
+
+    long = df_kinematic_params.set_index(id_cols)
+    # Spalten in MultiIndex (param, side) zerlegen am Punkt
+    long.columns = long.columns.str.rsplit(".", n=1, expand=True)
+    long.columns.names = ["param", "side"]
+    # side aus den Spalten in den Index stacken
+    long = long.stack("side").reset_index()
+    long.columns.name = None
+    safe_result_dataframe(long, "kinematic_params_long.xlsx")

@@ -120,7 +120,7 @@ def save_cleaned_demographics_data(df_demo: pd.DataFrame):
 
 def load_cleaned_demographics_data() -> pd.DataFrame:
     path_root = load_path_root()
-    path_demo_cleaned = Path(path_root) / "demographics_cleaned.xlsx"
+    path_demo_cleaned = Path(path_root) / "TrackGrandPrix" / "demographics_cleaned.xlsx"
     if not path_demo_cleaned.exists():
         raise FileNotFoundError(f"File {path_demo_cleaned} not found")
     df_demo = pd.read_excel(path_demo_cleaned)

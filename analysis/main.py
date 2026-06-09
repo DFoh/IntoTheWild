@@ -663,8 +663,25 @@ if __name__ == '__main__':
 
     if recalc_kinematics:
         safe_result_dataframe(df_kinematic_params, "kinematic_params.xlsx")
+        df_kinematic_params.drop(["path"], axis=1, inplace=True)
     # reformat dataframe so there are no sided-columns, but a column "side" instead (long format)
-    df_kinematic_params.drop(["path"], axis=1, inplace=True)
+
+    # Make wide format with lap_side_param, side_lap_param, param_side_lap, separat für l/r und einmal gemittelt
+    # Und dann die Finish Time hinzufügen
+
+    params = ["running_speed_ms", "step_rate_spm", "contact_time_ms", "flight_time_ms", "vertical_pelvis_movement_cm", "leg_spring_stiffness"]
+    cols = [c for c in df_kinematic_params.columns if c.split(".")[0] in params]
+    wide = df_kinematic_params.pivot(index='Bib', columns='Lap', values=cols)
+
+    df_finish_time = pd.DataFrame(df_demographics.set_index("Bib")["finish_time_s"])
+    # df_finish_time.dropna(subset=["finish_time_s"], inplace=True)
+    df_finish_time.columns = pd.MultiIndex.from_tuples([("finish_time_s", "")])
+
+    wide = wide.join(df_finish_time)
+    wide.columns = [f"{c[0]}.lap{c[1]}" for c in wide.columns]
+    wide.reset_index(inplace=True, drop=False)
+    safe_result_dataframe(wide, "leg_stiffness_params_wide.xlsx")
+    wide.to_excel("")
 
     id_cols = ["Heat", "Bib", "Lap"]
 

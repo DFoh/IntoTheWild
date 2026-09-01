@@ -1,7 +1,7 @@
 import shutil
 import subprocess
 
-from moviepy import VideoFileClip
+# from moviepy import VideoFileClip
 
 from util import get_heat_trials, paths_videos
 
@@ -23,7 +23,7 @@ cut_times_heat_1 = [
 
 cut_times_heat_2 = [["0:27", "0:40"], ["1:46", "2:09"], ["3:07", "3:27"], ["3:28", "3:38"], ["4:24", "4:39"],
                     ["4:42", "4:51"], ["4:55", "5:05"], ["5:45", "6:01"], ["6:06", "6:18"], ["6:25", "6:36"],
-                    ["7:05", "7:22"], ["7:31", "7:49"], ["7:54", "8:08"], ["8:39", "8:45"], ["8:56", "9:06"],
+                    ["7:05", "7:22"], ["7:31", "7:49"], ["7:54", "8:08"],["8:25", "8:37"], ["8:39", "8:45"], ["8:56", "9:06"],  # ["8:25", "8:37"] was added lately for lap 7 of 183, 187, and 274
                     ["9:08", "9:29"], ["9:34", "9:55"], ["9:59", "10:11"], ["10:21", "10:34"], ["10:39", "10:45"],
                     ["10:47", "10:57"], ["11:05", "11:17"], ["11:21", "11:37"], ["11:48", "12:04"], ["12:09", "12:38"],
                     ["12:43", "12:54"], ["12:58", "13:04"], ["13:13", "13:33"], ["13:41", "14:02"], ["14:05", "14:19"],
@@ -150,24 +150,24 @@ cut_times = {
 }
 
 
-def cut_video(path_video_in, path_video_out, start_time_str, end_time_str):
-    # "mm:ss" → Seconds
-    m, sec = map(int, start_time_str.split(":"))
-    start_time = m * 60 + sec
-    m, sec = map(int, end_time_str.split(":"))
-    end_time = m * 60 + sec
-
-    with VideoFileClip(str(path_video_in)) as clip:
-        try:
-            sub = clip.subclipped(start_time, end_time)
-            sub.write_videofile(
-                str(path_video_out),
-                codec="copy",
-                audio=False,
-                fps=clip.fps
-            )
-        except ValueError as e:
-            print(f"Error cutting video {path_video_in} from {start_time_str} to {end_time_str}: {e}")
+# def cut_video(path_video_in, path_video_out, start_time_str, end_time_str):
+#     # "mm:ss" → Seconds
+#     m, sec = map(int, start_time_str.split(":"))
+#     start_time = m * 60 + sec
+#     m, sec = map(int, end_time_str.split(":"))
+#     end_time = m * 60 + sec
+#
+#     with VideoFileClip(str(path_video_in)) as clip:
+#         try:
+#             sub = clip.subclipped(start_time, end_time)
+#             sub.write_videofile(
+#                 str(path_video_out),
+#                 codec="copy",
+#                 audio=False,
+#                 fps=clip.fps
+#             )
+#         except ValueError as e:
+#             print(f"Error cutting video {path_video_in} from {start_time_str} to {end_time_str}: {e}")
 
 
 def cut_video_lossless(path_video_in, path_video_out, start_time_str, end_time_str):

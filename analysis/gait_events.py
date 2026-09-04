@@ -130,25 +130,27 @@ def get_running_events_maiwald(heel_marker_vertical_traj: np.ndarray,
     return {"IC": ics, "TO": tos}
 
 
-def get_valid_frame_range(data, side: str):
+def get_valid_frame_range(data, side: str, earliest: int = 0, latest: int = -1):
     # ISSUE: the data will have NaN values at the start and end because the skeleton is not solved in the first and last frames.
     # SOLUTION: check the data for the first and last valid frame and only analyze this window.
     # also: save the first frame to later offset the detected events to the actual frame number in the original file.
     # This is important for later comparison with the force platform data.
+    # earliest and latest are optional arguments for files which needed cutting (for whatever reason) BEFORE the valid frame range is determined
+    # e.g. files with tracking errors, where the trajectory was split into two parts
 
-    heel_pos_data = data[f"{side}_Heel_Pos"][0][0]
-    toe_pos_data = data[f"{side}_Toe_Pos"][0][0]
+    heel_pos_data = data[f"{side}_Heel_Pos"][0][0][earliest:latest]
+    toe_pos_data = data[f"{side}_Toe_Pos"][0][0][earliest:latest]
     mask = ~np.isnan(heel_pos_data[:, 0]) & ~np.isnan(toe_pos_data[:, 0])
     valid_indices = np.where(mask)[0]
-    first_valid_frame = int(valid_indices[0])
-    last_valid_frame = int(valid_indices[-1])
+    first_valid_frame = int(valid_indices[0]) + earliest  # adjust for possible frame range adjustment
+    last_valid_frame = int(valid_indices[-1]) + earliest
 
     return first_valid_frame, last_valid_frame
 
 
 def check_valid_frame_range(valid_start, valid_end, sample_rate) -> bool:
-    # Check if the valid frame range is sufficient for analysis (1.5 seconds)
-    if (valid_end - valid_start) < (1.5 * sample_rate):
+    # Check if the valid frame range is sufficient for analysis (1.0 seconds)
+    if (valid_end - valid_start) < (1.0 * sample_rate):
         return False
     return True
 
@@ -163,12 +165,12 @@ def get_mid_stance_proxy_events(foot_vel, events) -> list:
         mss.append(int(ms))
     return mss
 
-def get_running_events(data):
+def get_running_events(data, frame_range_start: int = 0, frame_range_end: int = -1):
     events = {}
     sample_rate = data['FRAME_RATE'][0][0][0][0]  # Assuming frame rate is stored in this field
 
     for side in ["Left", "Right"]:
-        valid_start, valid_end = get_valid_frame_range(data, side)
+        valid_start, valid_end = get_valid_frame_range(data, side, frame_range_start, frame_range_end)
         if not check_valid_frame_range(valid_start, valid_end, sample_rate):
             warnings.warn(f"Valid frame range for {side} side is too short for reliable event detection. Skipping this side.")
             continue

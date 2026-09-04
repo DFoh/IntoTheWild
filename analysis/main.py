@@ -29,10 +29,10 @@ def get_valid_frame_range(data, side: str):
     return first_valid_frame, last_valid_frame
 
 
-def get_events(mat_file) -> dict | None:
+def get_events(mat_file, frame_range_start: int = 0, frame_range_end: int = -1) -> dict | None:
     data = loadmat(mat_file)
     try:
-        events = get_running_events(data)
+        events = get_running_events(data, frame_range_start, frame_range_end)
     except Exception as e:
         warnings.warn(f"Exception {e} in {mat_file}")
         events = None
@@ -42,29 +42,29 @@ def get_events(mat_file) -> dict | None:
     return events
 
 
-def calc_events(path_data_root: Path, heats: list, laps: list) -> pd.DataFrame:
-    rows = []
-    for heat in heats:
-        path_mat = path_data_root / heat
-        bib_numbers = [d.name for d in path_mat.iterdir() if d.is_dir()]
-        bib_numbers.sort()
-        print(bib_numbers)
-        for bib_number in bib_numbers:
-            print(f"Processing Heat {heat}, Bib {bib_number}...")
-            mat_files = list((path_mat / bib_number).glob("*filt.mat"))
-            lap_file_dict = {int(f.stem.split("_")[2]): f for f in mat_files}
-            for lap_no, mat_file in lap_file_dict.items():
-                print(f"Processing lap {lap_no} from file {mat_file.name}...")
-                events = get_events(mat_file)
-                rows.append({"Heat": heat, "Bib": bib_number, "Lap": lap_no, "Events": events})
-    df_events = pd.DataFrame(rows)
-    # sort by heat, bib, lap
-    df_events.sort_values(by=["Heat", "Bib", "Lap"], inplace=True)
-    # reindex the dataframe
-    df_events.reset_index(drop=True, inplace=True)
-    # set the dtype of "Bib" to int
-    df_events["Bib"] = df_events["Bib"].astype(int)
-    return df_events
+# def calc_events(path_data_root: Path, heats: list, laps: list) -> pd.DataFrame:
+#     rows = []
+#     for heat in heats:
+#         path_mat = path_data_root / heat
+#         bib_numbers = [d.name for d in path_mat.iterdir() if d.is_dir()]
+#         bib_numbers.sort()
+#         print(bib_numbers)
+#         for bib_number in bib_numbers:
+#             print(f"Processing Heat {heat}, Bib {bib_number}...")
+#             mat_files = list((path_mat / bib_number).glob("*filt.mat"))
+#             lap_file_dict = {int(f.stem.split("_")[2]): f for f in mat_files}
+#             for lap_no, mat_file in lap_file_dict.items():
+#                 print(f"Processing lap {lap_no} from file {mat_file.name}...")
+#                 events = get_events(mat_file)
+#                 rows.append({"Heat": heat, "Bib": bib_number, "Lap": lap_no, "Events": events})
+#     df_events = pd.DataFrame(rows)
+#     # sort by heat, bib, lap
+#     df_events.sort_values(by=["Heat", "Bib", "Lap"], inplace=True)
+#     # reindex the dataframe
+#     df_events.reset_index(drop=True, inplace=True)
+#     # set the dtype of "Bib" to int
+#     df_events["Bib"] = df_events["Bib"].astype(int)
+#     return df_events
 
 
 def calc_running_speed(data) -> np.float64 | None:
@@ -206,8 +206,7 @@ def calc_overstriding(data, events, side: str, parameter: str) -> float:
 
 def calc_step_rate(events, framerate) -> float:
     if events is None:
-        warnings.warn(f"No events found.")
-        return np.nan
+        raise ValueError("No gait events found.")
     ics = events.get("Left", {}).get("IC", []) + events.get("Right", {}).get("IC", [])
     ics = np.array(sorted(ics))
     step_rates = 60 / np.diff(ics) * framerate  # convert to stepsper minute
@@ -485,7 +484,30 @@ def calc_kinematic_params(
     #
     #
     running_speed_ms = calc_running_speed(data)
-    step_rate = calc_step_rate(events, framerate)
+    try:
+        step_rate = calc_step_rate(events, framerate)
+    except ValueError as e:
+        warnings.warn(f"Value Error in step rate calculation for lap {lap_no} bib {bib}:  {e}")
+        step_rate = None
+    #
+    #
+    # KNEE FLEXION PLOTS STEP WISE
+    #
+    #
+    plt.close()
+
+    path_plot = load_path_root() / "TrackGrandPrix" / "kinematics" / "plots" / "knee_flexion_angles_raw"
+    fig, ax = plt.subplots()
+    for side, col in zip(["Left", "Right"], ["red", "blue"]):
+        knee_flexion = data[f'{side}_Knee_Angles'][0][0][:, 0]
+        events_side = events.get(side)
+        for ic, to in zip(events_side["IC"], events_side["TO"]):
+            ax.plot(knee_flexion[ic:to], color=col)
+    fig.suptitle(f"{bib} - {lap_no}")
+    f_name = f"knee_flexion_{bib}_{lap_no}.png"
+    plt.show()
+    # fig.savefig((path_plot / f_name), bbox_inches="tight")
+
     #
     #
     # Sided params:
@@ -573,16 +595,51 @@ def event_dict_from_row(row: pd.Series, bib: int, lap_no: int) -> dict | None:
 
 
 def events_processor(row: pd.Series, df_demographics: pd.DataFrame) -> dict | None:
-    if not {"Heat", "Bib", "Lap", "path"}.issubset(row.index):
-        return None
+    if not {"Bib", "Lap", "path"}.issubset(row.index):
+        return {}
     if "_filt" not in row.Lap:
         return None
     bib = int(row.Bib)
+    lap = int(row.Lap.split("lap_")[-1].split("_")[0])
     df_sub = df_demographics[df_demographics["start_number"] == bib]
     if df_sub.empty:
         return None
-    events = get_events(row.path)
+
+    matches = [item for item in frame_range_adjustments if (item[0] == bib) & (item[1] == lap)]
+    if matches:
+        events = get_events(row.path, frame_range_start=matches[0][2], frame_range_end=matches[0][3])
+        data = loadmat(row.path)
+        pelvis_com = data['Pelvis_COM_Position'][0][0]
+        plt.close()
+        plt.plot(pelvis_com)
+        for side, col in zip(["Left", "Right"], ["r", "b"]):
+
+            for ics, tos in zip(events[side]["IC"], events[side]["TO"]):
+                plt.axvline(x=ics, color=col)
+                plt.axvline(x=tos, color=col, linestyle="--")
+        plt.title(f"{bib} - {lap}")
+        plt.show()
+
+        foo = 1
+    else:
+        events = get_events(row.path)
+
     return events
+
+
+frame_range_adjustments = [
+    # (bib_no, lap, start_frame, end_frame)
+    (183, 11, 0, 200),
+    (186, 3, 20, -1),
+    (213, 12, 0, 200),
+    (219, 8, 0, 250),
+    (222, 1, 0, 145),
+    (225, 6, 65, -1),
+    (245, 1, 0, 140),  # check if it's the correct person or if the second part is the correct one
+    (277, 6, 0, 240),
+    (280, 11, 0, 210),
+    (360, 12, 5, -1)
+]
 
 
 def remove_outliers(df: pd.DataFrame, z_thresh: float = 3.0) -> pd.DataFrame:
@@ -591,14 +648,14 @@ def remove_outliers(df: pd.DataFrame, z_thresh: float = 3.0) -> pd.DataFrame:
 
     """
     outliers = [
-        (183, 11, "faulty gait events"),
-        (186, 3, "unsteady trajectories"),
-        (222, 1, "unsteady trajectories"),
-        (225, 6, "gap in trajectories"),
-        (245, 1, "gap in trajectories"),
-        (277, 6, "gap in trajectories"),
-        (280, 11, "gap in trajectories"),
-        (360, 12, "unsteady trajectories"),
+        (183, 11, "faulty gait events"),  # solution: cut file to the first 200 frames!
+        (186, 3, "unsteady trajectories"),  # solution: cut first 20 frames off
+        (222, 1, "unsteady pelvis ap trajectory mid file"),  # MAYBE: could be cut to the first 120 frames (short period then...)
+        (225, 6, "gap in trajectories"),  # solution:cut first 65 frames off
+        (245, 1, "gap in trajectories"),  # NO CHANCE: Person tracking ID must have swapped.
+        (277, 6, "gap in trajectories"),  # solution:cut to the first 229 frames
+        (280, 11, "gap in trajectories"),  # solution:cut to the first 205 frames
+        (360, 12, "unsteady trajectories"),  # solution: cut first 10 frames off
     ]
 
     for bib, lap, reason in outliers:
@@ -610,11 +667,12 @@ def remove_outliers(df: pd.DataFrame, z_thresh: float = 3.0) -> pd.DataFrame:
 
 if __name__ == '__main__':
     recalc_events = False
-    recalc_kinematics = False
+    recalc_kinematics = True
     path_root = load_path_root()
-    path_mat_root = Path(path_root) / "TrackGrandPrix" / "kinematics" / "mat"
+    path_kinematics = Path(path_root) / "TrackGrandPrix" / "kinematics"
+    path_mat_root = path_kinematics / "mat"
     bp = BatchProcessor(path_mat_root,
-                        level_names=["Heat", "Bib", "Lap"],
+                        level_names=["Bib", "Lap"],
                         file_pattern="_filt.mat")
 
     df_demo = get_participant_data()
@@ -627,6 +685,16 @@ if __name__ == '__main__':
         df_events = pd.json_normalize(res)
         df_events = pd.concat([bp.index.reset_index(drop=True), df_events], axis=1)
         df_events["Lap"] = df_events["Lap"].apply(lambda x: x.split("_")[2])
+        df_events["Lap"] = df_events["Lap"].astype(int)
+
+        df_step_count = df_events.copy()
+        df_step_count["count_left"] = df_events.apply(lambda x: len(x["Left.MS"]) if isinstance(x["Left.MS"], list) else 0, axis=1)
+        df_step_count["count_right"] = df_events.apply(lambda x: len(x["Right.MS"]) if isinstance(x["Right.MS"], list) else 0, axis=1)
+        df_step_count = df_step_count[["Bib", "Lap", "count_left", "count_right"]]
+
+        df_step_count_left = df_step_count.pivot(index='Bib', columns='Lap', values="count_left").fillna(0).astype(int)
+
+        df_step_count_left.to_excel((path_kinematics / "step_count_left.xlsx"))
 
         safe_event_dataframe(df_events)
     else:
@@ -637,59 +705,59 @@ if __name__ == '__main__':
     df_demographics = load_cleaned_demographics_data()
 
     if recalc_kinematics:
-
         res_kin = bp.apply(calc_kinematic_params,
                            df_events=df_events,
                            df_demographics=df_demographics,
-                           df_leg_length=df_limb_lenghts)
+                           df_leg_length=df_limb_lenghts,
+                           multiprocess=False)
 
         df_kinematic_params = pd.json_normalize(res_kin)
         df_kinematic_params = pd.concat([bp.index.reset_index(drop=True), df_kinematic_params], axis=1)
         df_kinematic_params["Lap"] = df_kinematic_params["Lap"].apply(lambda x: int(x.split("_")[2]))
-        df_kinematic_params.sort_values(["Heat", "Bib", "Lap"], inplace=True)
+        df_kinematic_params.sort_values(["Bib", "Lap"], inplace=True)
     else:
         df_kinematic_params = load_result_dataframe("kinematic_params.xlsx")
-    df_kinematic_params = remove_outliers(df_kinematic_params)
+    # df_kinematic_params = remove_outliers(df_kinematic_params)
 
     #
     #
     # Segment length based data checks
     #
     #
-
-    # data_check(events)
-    # plot_limb_lengths_over_laps(df_limb_lenghts)
-    # print(events.head())
-
-    if recalc_kinematics:
-        safe_result_dataframe(df_kinematic_params, "kinematic_params.xlsx")
-        df_kinematic_params.drop(["path"], axis=1, inplace=True)
-    # reformat dataframe so there are no sided-columns, but a column "side" instead (long format)
-
-    # Make wide format with lap_side_param, side_lap_param, param_side_lap, separat für l/r und einmal gemittelt
-    # Und dann die Finish Time hinzufügen
-
-    params = ["running_speed_ms", "step_rate_spm", "contact_time_ms", "flight_time_ms", "vertical_pelvis_movement_cm", "leg_spring_stiffness"]
-    cols = [c for c in df_kinematic_params.columns if c.split(".")[0] in params]
-    wide = df_kinematic_params.pivot(index='Bib', columns='Lap', values=cols)
-
-    df_finish_time = pd.DataFrame(df_demographics.set_index("Bib")["finish_time_s"])
-    # df_finish_time.dropna(subset=["finish_time_s"], inplace=True)
-    df_finish_time.columns = pd.MultiIndex.from_tuples([("finish_time_s", "")])
-
-    wide = wide.join(df_finish_time)
-    wide.columns = [f"{c[0]}.lap{c[1]}" for c in wide.columns]
-    wide.reset_index(inplace=True, drop=False)
-    safe_result_dataframe(wide, "leg_stiffness_params_wide.xlsx")
-    wide.to_excel("")
-
-    id_cols = ["Heat", "Bib", "Lap"]
-
-    long = df_kinematic_params.set_index(id_cols)
-    # Spalten in MultiIndex (param, side) zerlegen am Punkt
-    long.columns = long.columns.str.rsplit(".", n=1, expand=True)
-    long.columns.names = ["param", "side"]
-    # side aus den Spalten in den Index stacken
-    long = long.stack("side").reset_index()
-    long.columns.name = None
-    safe_result_dataframe(long, "kinematic_params_long.xlsx")
+    #
+    # # data_check(events)
+    # # plot_limb_lengths_over_laps(df_limb_lenghts)
+    # # print(events.head())
+    #
+    # if recalc_kinematics:
+    #     df_kinematic_params.drop(["path"], axis=1, inplace=True)
+    #     safe_result_dataframe(df_kinematic_params, "kinematic_params.xlsx")
+    # # reformat dataframe so there are no sided-columns, but a column "side" instead (long format)
+    #
+    # # Make wide format with lap_side_param, side_lap_param, param_side_lap, separat für l/r und einmal gemittelt
+    # # Und dann die Finish Time hinzufügen
+    #
+    # params = ["running_speed_ms", "step_rate_spm", "contact_time_ms", "flight_time_ms", "vertical_pelvis_movement_cm", "leg_spring_stiffness"]
+    # cols = [c for c in df_kinematic_params.columns if c.split(".")[0] in params]
+    # wide = df_kinematic_params.pivot(index='Bib', columns='Lap', values=cols)
+    #
+    # df_finish_time = pd.DataFrame(df_demographics.set_index("Bib")["finish_time_s"])
+    # # df_finish_time.dropna(subset=["finish_time_s"], inplace=True)
+    # df_finish_time.columns = pd.MultiIndex.from_tuples([("finish_time_s", "")])
+    #
+    # wide = wide.join(df_finish_time)
+    # wide.columns = [f"{c[0]}.lap{c[1]}" for c in wide.columns]
+    # wide.reset_index(inplace=True, drop=False)
+    # safe_result_dataframe(wide, "leg_stiffness_params_wide.xlsx")
+    # wide.to_excel("")
+    #
+    # id_cols = ["Heat", "Bib", "Lap"]
+    #
+    # long = df_kinematic_params.set_index(id_cols)
+    # # Spalten in MultiIndex (param, side) zerlegen am Punkt
+    # long.columns = long.columns.str.rsplit(".", n=1, expand=True)
+    # long.columns.names = ["param", "side"]
+    # # side aus den Spalten in den Index stacken
+    # long = long.stack("side").reset_index()
+    # long.columns.name = None
+    # safe_result_dataframe(long, "kinematic_params_long.xlsx")

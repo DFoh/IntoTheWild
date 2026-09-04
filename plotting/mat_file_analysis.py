@@ -6,13 +6,15 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from labtools.batch_processor import BatchProcessor
 from scipy.io import loadmat
 from scipy.signal import find_peaks
+
+from analysis.util import load_path_root
 
 PATH_ROOT_WIN = r"C:\Users\dominik.fohrmann\OneDrive - MSH Medical School Hamburg - University of Applied Sciences and Medical University\Dokumente\Projects\IntoTheWild\data\TrackGrandPrix"
 # for macOS:
 PATH_ROOT_MAC = r"/Users/dominikfohrmann/OneDrive - MSH Medical School Hamburg - University of Applied Sciences and Medical University/Dokumente/Projects/IntoTheWild/data/TrackGrandPrix"
-
 
 if sys.platform.startswith('win'):
     PATH_ROOT = PATH_ROOT_WIN
@@ -90,11 +92,11 @@ def get_running_events(data):
             continue
 
         heel_vert_pos = data[f"{side}_Heel_Pos"][0][0][valid_start:valid_end,
-                        2]  # Assuming vertical position is the 3rd column
+        2]  # Assuming vertical position is the 3rd column
         heel_vert_vel = np.gradient(heel_vert_pos) * sample_rate  # Vertical velocity of the heel
         heel_vert_acc = np.gradient(heel_vert_vel) * sample_rate  # Vertical acceleration of the heel
         toe_vert_pos = data[f"{side}_Toe_Pos"][0][0][valid_start:valid_end,
-                       2]  # Assuming vertical position is the 3rd column
+        2]  # Assuming vertical position is the 3rd column
         toe_vert_vel = np.gradient(toe_vert_pos) * sample_rate
         toe_vert_acc = np.gradient(toe_vert_vel) * sample_rate
         ax_top.plot(heel_vert_pos, label=f"{side} Heel Pos")
@@ -259,40 +261,54 @@ def get_events(mat_file) -> dict | None:
     return events
 
 
+def make_pelvis_com_plots(
+        row: pd.Series) -> dict | None:
+    path_plot_base = Path(PATH_ROOT) / "kinematics" / "plots" / "pelvis_com_pos"
+    path = row.get("path")
+    bib = row.get("Bib")
+    lap = row.get("Lap")
+
+    data = loadmat(path)
+    pelvis_com_pos = data['Pelvis_COM_Position'][0][0]
+    knee_flexion_l = data['Left_Knee_Angles'][0][0][:, 0]
+    knee_flexion_r = data['Right_Knee_Angles'][0][0][:, 0]
+
+    # check if ap position is steadily increasing
+    pelvis_ap = pelvis_com_pos[:, 0]
+    # pelvis_ap = pelvis_ap[~np.isnan(pelvis_ap)]
+    diff = np.diff(pelvis_ap)
+    ind = np.where(diff < 0)[0]
+
+    plt.close()
+    fig, [ax1, ax2] = plt.subplots(2, 1, figsize=(12, 12), sharex=True)
+    ax1.plot(pelvis_com_pos)
+    ax2.plot(knee_flexion_l)
+    ax2.plot(knee_flexion_r)
+    marked = False
+    if len(ind) > 0:
+        marked = True
+        for i in ind:
+            ax1.axvline(i, color='red', linestyle='--')
+
+    ax1.axhline(0, color='k', linewidth=0.5)
+    ax1.set_xlim([0, 300])
+    ax1.set_ylim([-8, 8])
+    ax1.set_title(f"Pelvis COM Position {bib} - {lap}")
+
+    path_plot = path_plot_base / f"{lap}.png"
+    plt.savefig(path_plot, bbox_inches="tight")
+    if marked:
+        path_plot = path_plot_base / "outlier" / f"{lap}.png"
+        path_plot.parent.mkdir(exist_ok=True, parents=True)
+        plt.savefig(path_plot, bbox_inches="tight")
+    return
+
+
 if __name__ == '__main__':
-    path_mat_root = Path(PATH_ROOT) / "kinematics" / "mat"
-    path_plot = Path(PATH_ROOT) / "kinematics" / "plots"
-    path_plot.mkdir(exist_ok=True)
-    heat_directories = [d for d in path_mat_root.iterdir() if d.is_dir()]
-    heat_directories.sort()
-    heats = [d.name for d in heat_directories]
-    print(heats)
+    path_root = load_path_root()
+    path_mat_root = Path(path_root) / "TrackGrandPrix" / "kinematics" / "mat"
+    bp = BatchProcessor(path_mat_root,
+                        level_names=["Bib", "Lap"],
+                        file_pattern="_filt.mat")
 
-    laps = list(range(1, 14))
-    df_events = pd.DataFrame(columns=["Heat", "Bib", "Lap", "Events"])
-
-    for heat in heats:
-        path_mat = path_mat_root / heat
-        bib_numbers = [d.name for d in path_mat.iterdir() if d.is_dir()]
-        bib_numbers.sort()
-        print(bib_numbers)
-        for bib_number in bib_numbers:
-            print(f"Processing Heat {heat}, Bib {bib_number}...")
-            mat_files = list((path_mat / bib_number).glob("*filt.mat"))
-            lap_file_dict = {int(f.stem.split("_")[2]): f for f in mat_files}
-            # # MULTPROC
-            # with ProcessPoolExecutor() as executor:
-            #     results = list(executor.map(process_file, mat_files))
-
-            # DEBUGGING WITHOUT MULTIPROC TO CHECK THE PLOTS
-            for lap_no, mat_file in lap_file_dict.items():
-                print(f"Processing lap {lap_no} from file {mat_file.name}...")
-                events = get_events(mat_file)
-                df_ = pd.DataFrame({
-                    "Heat": heat,
-                    "Bib": bib_number,
-                    "Lap": lap_no,
-                    "Events": [events]
-                }, index=[0])
-                df_heat = pd.concat([df_events, df_], ignore_index=True)
-    safe_event_dataframe(df_events)
+    bp.apply(make_pelvis_com_plots, multiprocess=True)

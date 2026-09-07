@@ -1,7 +1,7 @@
 import pandas as pd
 
 from analysis.util import load_result_dataframe, load_demographics_raw_data, save_cleaned_demographics_data, \
-    save_merged_dataframe
+    save_merged_dataframe, load_cleaned_demographics_data
 
 
 def df_remove_dnfers(df: pd.DataFrame) -> pd.DataFrame:
@@ -14,9 +14,9 @@ def df_remove_dnfers(df: pd.DataFrame) -> pd.DataFrame:
 
 if __name__ == '__main__':
     # Whether or not to remove DNFers from the merged dataset. This will remove all rows where "finish_time_s" is NaN or where "avg_speed_m_s" is NaN.
-    remove_dnfers = True
-    df_kinematics = load_result_dataframe("kinematic_params.xlsx")
-    df_demographics = load_demographics_raw_data()
+    remove_dnfers = False
+    df_kinematics = load_result_dataframe("kinematic_params_long.xlsx")
+    df_demographics = load_cleaned_demographics_data()
     bibs_demo = set(df_demographics["Bib"])
     bibs_kinematics = set(df_kinematics["Bib"])
     print(f"Found {len(bibs_demo)} bibs in demographics and {len(bibs_kinematics)} bibs in kinematics")
@@ -26,7 +26,7 @@ if __name__ == '__main__':
     print(f"Bibs in kinematics but not in demographics: {bibs_not_in_demo}")
     bibs_resulting = bibs_demo.intersection(bibs_kinematics)
     print(f"Finally including {len(bibs_resulting)} bibs in the merged dataset")
-    df_merged = pd.merge(df_kinematics, df_demographics, on="Bib", how="inner")
+    df_merged = pd.merge(df_demographics, df_kinematics, on="Bib", how="inner")
     foo = 1
     df_demo_cleaned = df_demographics[df_demographics["Bib"].isin(bibs_resulting)].copy()
     df_demo_cleaned.sort_values("Bib", inplace=True)
@@ -40,4 +40,4 @@ if __name__ == '__main__':
         df_merged = df_merged[df_merged["Bib"].isin(bibs_cleaned)].copy()
 
     save_merged_dataframe(df_merged)
-    save_cleaned_demographics_data(df_demo_cleaned)
+    # save_cleaned_demographics_data(df_demo_cleaned)

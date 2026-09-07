@@ -3,14 +3,20 @@ import warnings
 from collections import defaultdict
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from labtools.batch_processor import BatchProcessor
 from scipy.io import loadmat
 
-from analysis.util import get_participant_data, load_cleaned_demographics_data, load_path_root, load_result_dataframe, safe_event_dataframe
-from analysis.util import load_events_from_excel, safe_result_dataframe
+from analysis.util import get_participant_data, load_cleaned_demographics_data, load_path_root, load_result_dataframe, \
+    safe_event_dataframe, safe_result_dataframe
+from analysis.util import load_events_from_excel
 from gait_events import get_running_events
+
+
+# import matplotlib
+# matplotlib.use("Qt5Agg")
 
 
 def get_valid_frame_range(data, side: str):
@@ -275,9 +281,6 @@ def calc_trunk_flexion(data, events, side) -> float:
     return np.mean(flexions) if len(flexions) > 0 else np.nan
 
 
-import matplotlib.pyplot as plt
-
-
 def calc_peak_pelvis_ap_tilt(data, events, side) -> float:
     # TODO: Check out if this makes sense. The pelvis anterior tilt is the rotation around the ml axis in the global CS,
     # TODO: ... but the actual "peak" is shortly after the TO and not during the stance
@@ -398,8 +401,10 @@ def calc_leg_stiffness(data, events, side, bodymass, leg_length) -> float:
     contralateral_side = "Right" if side == "Left" else "Left"
 
     # to loop over steps, we need the first contralateral toe-off event and the last contralateral initial contact
-    first_contralateral_to = [c_ic for c_ic in sequential_events if (c_ic[1] == contralateral_side) & (c_ic[2] == "TO")][0]
-    last_contralateral_ic = [c_ic for c_ic in sequential_events if (c_ic[1] == contralateral_side) & (c_ic[2] == "IC")][-1]
+    first_contralateral_to = \
+        [c_ic for c_ic in sequential_events if (c_ic[1] == contralateral_side) & (c_ic[2] == "TO")][0]
+    last_contralateral_ic = [c_ic for c_ic in sequential_events if (c_ic[1] == contralateral_side) & (c_ic[2] == "IC")][
+        -1]
     i_first_contralateral_to = sequential_events.index(first_contralateral_to)
     i_last_contralateral_ic = sequential_events.index(last_contralateral_ic)
     sequential_events_reduced = sequential_events[i_first_contralateral_to:i_last_contralateral_ic + 1]
@@ -419,10 +424,12 @@ def calc_leg_stiffness(data, events, side, bodymass, leg_length) -> float:
         F_max_modelled = bodymass * 9.81 * np.pi * 0.5 * (flight_time / contact_time + 1)
         # modelled vertical center of mass displacement
         # Formula (7) from Morin et al. 2005
-        delta_y_c_modelled = ((F_max_modelled * contact_time ** 2) / (bodymass * np.pi ** 2)) + 9.81 * (contact_time ** 2 / 8)
+        delta_y_c_modelled = ((F_max_modelled * contact_time ** 2) / (bodymass * np.pi ** 2)) + 9.81 * (
+                contact_time ** 2 / 8)
         # modelled leg length variation
         # Formula (9) from Morin et al. 2005
-        delta_L_modelled = leg_length - np.sqrt(leg_length ** 2 - (speed_meters_per_second * contact_time * 0.5) ** 2) + delta_y_c_modelled
+        delta_L_modelled = leg_length - np.sqrt(
+            leg_length ** 2 - (speed_meters_per_second * contact_time * 0.5) ** 2) + delta_y_c_modelled
         # ... and the modelled leg stiffness
         # Formula (8) in Morin
         k_leg = F_max_modelled / delta_L_modelled  # N/m
@@ -474,7 +481,7 @@ def calc_kinematic_params(
     lap_no = int(row["Lap"].split("_")[2])
     df_events["Bib"] = df_events["Bib"].astype(int)
     df_events["Lap"] = df_events["Lap"].astype(int)
-    events = event_dict_from_row(row, bib, lap_no)
+    events = event_dict_from_row(row, df_events, bib, lap_no)
 
     data = loadmat(row.path)
     framerate = data['FRAME_RATE'][0][0][0][0]
@@ -496,7 +503,7 @@ def calc_kinematic_params(
     #
     plt.close()
 
-    path_plot = load_path_root() / "TrackGrandPrix" / "kinematics" / "plots" / "knee_flexion_angles_raw"
+    path_plot = load_path_root() / "kinematics" / "plots" / "knee_flexion_angles_raw"
     fig, ax = plt.subplots()
     for side, col in zip(["Left", "Right"], ["red", "blue"]):
         knee_flexion = data[f'{side}_Knee_Angles'][0][0][:, 0]
@@ -505,8 +512,8 @@ def calc_kinematic_params(
             ax.plot(knee_flexion[ic:to], color=col)
     fig.suptitle(f"{bib} - {lap_no}")
     f_name = f"knee_flexion_{bib}_{lap_no}.png"
-    plt.show()
-    # fig.savefig((path_plot / f_name), bbox_inches="tight")
+    # plt.show()
+    fig.savefig((path_plot / f_name), bbox_inches="tight")
 
     #
     #
@@ -580,7 +587,7 @@ def calc_kinematic_params(
     return out
 
 
-def event_dict_from_row(row: pd.Series, bib: int, lap_no: int) -> dict | None:
+def event_dict_from_row(row: pd.Series, df_events, bib: int, lap_no: int) -> dict | None:
     lap_events = df_events[(df_events["Bib"] == bib) & (df_events["Lap"] == lap_no)]
     if pd.isna(lap_events["Left.IC"].values):
         return None
@@ -650,7 +657,8 @@ def remove_outliers(df: pd.DataFrame, z_thresh: float = 3.0) -> pd.DataFrame:
     outliers = [
         (183, 11, "faulty gait events"),  # solution: cut file to the first 200 frames!
         (186, 3, "unsteady trajectories"),  # solution: cut first 20 frames off
-        (222, 1, "unsteady pelvis ap trajectory mid file"),  # MAYBE: could be cut to the first 120 frames (short period then...)
+        (222, 1, "unsteady pelvis ap trajectory mid file"),
+        # MAYBE: could be cut to the first 120 frames (short period then...)
         (225, 6, "gap in trajectories"),  # solution:cut first 65 frames off
         (245, 1, "gap in trajectories"),  # NO CHANCE: Person tracking ID must have swapped.
         (277, 6, "gap in trajectories"),  # solution:cut to the first 229 frames
@@ -667,9 +675,9 @@ def remove_outliers(df: pd.DataFrame, z_thresh: float = 3.0) -> pd.DataFrame:
 
 if __name__ == '__main__':
     recalc_events = False
-    recalc_kinematics = True
+    recalc_kinematics = False
     path_root = load_path_root()
-    path_kinematics = Path(path_root) / "TrackGrandPrix" / "kinematics"
+    path_kinematics = Path(path_root) / "kinematics"
     path_mat_root = path_kinematics / "mat"
     bp = BatchProcessor(path_mat_root,
                         level_names=["Bib", "Lap"],
@@ -688,8 +696,10 @@ if __name__ == '__main__':
         df_events["Lap"] = df_events["Lap"].astype(int)
 
         df_step_count = df_events.copy()
-        df_step_count["count_left"] = df_events.apply(lambda x: len(x["Left.MS"]) if isinstance(x["Left.MS"], list) else 0, axis=1)
-        df_step_count["count_right"] = df_events.apply(lambda x: len(x["Right.MS"]) if isinstance(x["Right.MS"], list) else 0, axis=1)
+        df_step_count["count_left"] = df_events.apply(
+            lambda x: len(x["Left.MS"]) if isinstance(x["Left.MS"], list) else 0, axis=1)
+        df_step_count["count_right"] = df_events.apply(
+            lambda x: len(x["Right.MS"]) if isinstance(x["Right.MS"], list) else 0, axis=1)
         df_step_count = df_step_count[["Bib", "Lap", "count_left", "count_right"]]
 
         df_step_count_left = df_step_count.pivot(index='Bib', columns='Lap', values="count_left").fillna(0).astype(int)
@@ -709,7 +719,9 @@ if __name__ == '__main__':
                            df_events=df_events,
                            df_demographics=df_demographics,
                            df_leg_length=df_limb_lenghts,
-                           multiprocess=False)
+                           multiprocess=True)
+        for err in bp.errors:
+            print(f"Error in {err[0]}: {err[1]}")
 
         df_kinematic_params = pd.json_normalize(res_kin)
         df_kinematic_params = pd.concat([bp.index.reset_index(drop=True), df_kinematic_params], axis=1)
@@ -751,13 +763,13 @@ if __name__ == '__main__':
     # safe_result_dataframe(wide, "leg_stiffness_params_wide.xlsx")
     # wide.to_excel("")
     #
-    # id_cols = ["Heat", "Bib", "Lap"]
+    id_cols = ["Bib", "Lap"]
     #
-    # long = df_kinematic_params.set_index(id_cols)
-    # # Spalten in MultiIndex (param, side) zerlegen am Punkt
-    # long.columns = long.columns.str.rsplit(".", n=1, expand=True)
-    # long.columns.names = ["param", "side"]
-    # # side aus den Spalten in den Index stacken
-    # long = long.stack("side").reset_index()
-    # long.columns.name = None
-    # safe_result_dataframe(long, "kinematic_params_long.xlsx")
+    long = df_kinematic_params.set_index(id_cols)
+    # Spalten in MultiIndex (param, side) zerlegen am Punkt
+    long.columns = long.columns.str.rsplit(".", n=1, expand=True)
+    long.columns.names = ["param", "side"]
+    # side aus den Spalten in den Index stacken
+    long = long.stack("side").reset_index()
+    long.columns.name = None
+    safe_result_dataframe(long, "kinematic_params_long.xlsx")

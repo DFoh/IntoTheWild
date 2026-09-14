@@ -9,9 +9,8 @@ import pandas as pd
 from labtools.batch_processor import BatchProcessor
 from scipy.io import loadmat
 
-from analysis.util import get_participant_data, load_cleaned_demographics_data, load_path_root, load_result_dataframe, \
-    safe_event_dataframe, safe_result_dataframe
-from analysis.util import load_events_from_excel
+from analysis.util import load_path_root, safe_result_dataframe, load_result_dataframe, safe_event_dataframe, \
+    load_events_from_excel, load_cleaned_demographics_data, get_participant_data
 from gait_events import get_running_events
 
 
@@ -601,7 +600,34 @@ def event_dict_from_row(row: pd.Series, df_events, bib: int, lap_no: int) -> dic
     return events
 
 
+def make_steps(events: dict) -> list:
+    steps = []
+    for side in ["Left", "Right"]:
+        ics = events[side]["IC"]
+        tos = events[side]["TO"]
+        for ic, to in zip(ics, tos):
+            steps.append((ic, to, side))
+    return steps
+
+
+def make_strides(events: dict) -> list:
+    strides = []
+    for side in ["Left", "Right"]:
+        ics = events[side]["IC"]
+        tos = events[side]["TO"]
+        cl_ics = events["Right" if side == "Left" else "Left"]["IC"]
+        cl_tos = events["Left" if side == "Right" else "Right"]["TO"]
+        for ic, to, next_ic in zip(ics[:-1], tos, ics[1:]):
+            cl_ic_index = np.where((np.array(cl_ics) > ic) & (np.array(cl_ics) < next_ic))[0][0]
+            cl_ic = cl_ics[cl_ic_index]
+            cl_to_index = np.where((np.array(cl_tos) > ic) & (np.array(cl_tos) < next_ic))[0][0]
+            cl_to = cl_tos[cl_to_index]
+            strides.append((ic, to, cl_ic, cl_to, next_ic, side))
+    return strides
+
+STRIDE_COUNTER = 0
 def events_processor(row: pd.Series, df_demographics: pd.DataFrame) -> dict | None:
+    global STRIDE_COUNTER
     if not {"Bib", "Lap", "path"}.issubset(row.index):
         return {}
     if "_filt" not in row.Lap:
@@ -615,24 +641,98 @@ def events_processor(row: pd.Series, df_demographics: pd.DataFrame) -> dict | No
     matches = [item for item in frame_range_adjustments if (item[0] == bib) & (item[1] == lap)]
     if matches:
         events = get_events(row.path, frame_range_start=matches[0][2], frame_range_end=matches[0][3])
-        data = loadmat(row.path)
-        pelvis_com = data['Pelvis_COM_Position'][0][0]
-        plt.close()
-        plt.plot(pelvis_com)
-        for side, col in zip(["Left", "Right"], ["r", "b"]):
+        # plt.close()
+        # plt.plot(pelvis_com_vert)
+        # for side, col in zip(["Left", "Right"], ["r", "b"]):
+        #     for ics, tos in zip(events[side]["IC"], events[side]["TO"]):
+        #         plt.axvline(x=ics, color=col)
+        #         plt.axvline(x=tos, color=col, linestyle="--")
 
-            for ics, tos in zip(events[side]["IC"], events[side]["TO"]):
-                plt.axvline(x=ics, color=col)
-                plt.axvline(x=tos, color=col, linestyle="--")
-        plt.title(f"{bib} - {lap}")
-        plt.show()
 
-        foo = 1
     else:
         events = get_events(row.path)
 
-    return events
+    # clean events
+    data = loadmat(row.path)
+    strides = make_strides(events)  # list of: (IC, TO, CLIC, CLTO, nextIC, side)
+    print(len(strides))
+    STRIDE_COUNTER += len(strides)
+    steps = make_steps(events)  # list of: (IC, TO, side)
 
+    pelvis_com = data['Pelvis_COM_Position'][0][0]
+    pelvis_com_vert = pelvis_com[:, 2]
+    pelvis_com_vert_median = np.median(pelvis_com_vert)
+
+    cols = {"Right": "b", "Left": "r"}
+    plt.close()
+    # for step in steps:
+    #     ic, to, side = step
+    #     plt.plot(pelvis_com_vert[ic:to], color=cols[side])
+    #     print(to - ic)
+
+    stride_durations = []
+    for stride in strides:
+        ic, to, cl_ic, cl_to, next_ic, side = stride
+        plt.plot(pelvis_com_vert[ic:next_ic], color=cols[side])
+        plt.axvline(x=to - ic, color=cols[side], linestyle="--")
+        plt.axvline(x=cl_ic - ic, color=cols["Right" if side == "Left" else "Left"])
+        plt.axvline(x=cl_to - ic, color=cols["Right" if side == "Left" else "Left"], linestyle="--")
+        stride_durations.append(next_ic - ic)
+        # plt.axvline(x=next_ic, color=cols[side], linestyle="--")
+
+
+    # leave one out modified z-score method according to Iglewicz and Hoaglin (1993) "How to Detect and Handle Outliers" (ASQC Basic References in Quality Control: Statistical Techniques, Vol. 16)
+    # plus 2 frame plausibility check (e.g. if stride frames are 51, 51, 51, 51, 51, 50, the last one should not be flagged as an outlier, even though after the modified z-score calculation it would be)
+    # criterion 1:
+    med_duration = np.median(stride_durations)
+    abs_diffs = np.abs(np.array(stride_durations)- med_duration)
+    outlier_indices_1 = np.where(abs_diffs > 4.0)[0]
+    # todo: consider skipping next if no outlier here...
+    # criterion 2
+    mod_z_scores = []
+    for s in range(len(stride_durations)):
+        stride_durations_loo = stride_durations[:s] + stride_durations[s+1:]
+        median_stride_duration = np.median(stride_durations_loo)
+        mad = np.median(np.abs(np.array(stride_durations_loo) - median_stride_duration))
+        if mad < 1E-9:
+            mod_z_score = 1E9
+        else:
+            mod_z_score = 0.6745 * (np.array(stride_durations[s]) - median_stride_duration) / mad
+        mod_z_scores.append(mod_z_score)
+    outlier_indices_2 = np.where(np.abs(mod_z_scores) > 4.0)[0]
+    # combine:
+    outlier_indices = list(set(outlier_indices_1).intersection(outlier_indices_2))
+    outlier_indices = outlier_indices_1
+    outliers_found = False
+    if len(outlier_indices) > 0:
+        outliers_found = True
+
+    plt.title(f"{bib} - {lap} - stride durations: {stride_durations}")
+    if outliers_found:
+        print(f"Outliers found at indices: {outlier_indices} with stride durations: {[stride_durations[i] for i in outlier_indices]}")
+        plt.suptitle(f"Outliers found at indices: {outlier_indices} with stride durations: {[stride_durations[i] for i in outlier_indices]}")
+
+    path_plot = load_path_root() / "kinematics" / "plots" / "step_detection" /  "pelvis_com_vert"
+    filename = f"pelvis_com_vert_{bib}_{lap}.png"
+    if outliers_found:
+        filename = "error_" + filename
+    plt.savefig(path_plot / filename)
+
+    if outliers_found:
+        plt.close()
+        strides_cleaned = [strides[s] for s in range(len(strides)) if s not in outlier_indices]
+        for stride in strides_cleaned:
+            ic, to, cl_ic, cl_to, next_ic, side = stride
+            plt.plot(pelvis_com_vert[ic:next_ic], color=cols[side])
+            plt.axvline(x=to - ic, color=cols[side], linestyle="--")
+            plt.axvline(x=cl_ic - ic, color=cols["Right" if side == "Left" else "Left"])
+            plt.axvline(x=cl_to - ic, color=cols["Right" if side == "Left" else "Left"], linestyle="--")
+            stride_durations.append(next_ic - ic)
+            # plt.axvline(x=next_ic, color=cols[side], linestyle="--")
+        filename = filename.split(".png")[0] + "_cleaned.png"
+        plt.savefig(path_plot / filename)
+
+    return events
 
 frame_range_adjustments = [
     # (bib_no, lap, start_frame, end_frame)
@@ -674,7 +774,7 @@ def remove_outliers(df: pd.DataFrame, z_thresh: float = 3.0) -> pd.DataFrame:
 
 
 if __name__ == '__main__':
-    recalc_events = False
+    recalc_events = True
     recalc_kinematics = False
     path_root = load_path_root()
     path_kinematics = Path(path_root) / "kinematics"
@@ -706,10 +806,11 @@ if __name__ == '__main__':
 
         df_step_count_left.to_excel((path_kinematics / "step_count_left.xlsx"))
 
-        safe_event_dataframe(df_events)
+        # safe_event_dataframe(df_events)
     else:
         df_events = load_events_from_excel()
-
+    print(f"Strides: {STRIDE_COUNTER}")
+    raise NotImplementedError
     # get the limb lengths and mass for leg spring stiffness calculations
     df_limb_lenghts = load_result_dataframe("limb_lenghts.xlsx")
     df_demographics = load_cleaned_demographics_data()

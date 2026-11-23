@@ -3,12 +3,12 @@ from pathlib import Path
 from labtools.batch_processor import BatchProcessor
 from pandas.core.computation.ops import isnumeric
 
-from analysis.util import load_cleaned_demographics_data, load_path_root, load_result_dataframe, safe_result_dataframe
+from analysis.util import load_cleaned_demographics_data, load_path_track_grand_prix, load_result_dataframe, safe_result_dataframe
 import pandas as pd
 
 
 def check_mat_files():
-    path_root = load_path_root()
+    path_root = load_path_track_grand_prix()
     path_mat_root = Path(path_root) / "TrackGrandPrix" / "kinematics" / "mat"
     bp = BatchProcessor(path_mat_root,
                         level_names=["Bib", "Lap"],

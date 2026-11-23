@@ -39,5 +39,9 @@ if __name__ == '__main__':
         bibs_cleaned = set(df_demo_cleaned["Bib"])
         df_merged = df_merged[df_merged["Bib"].isin(bibs_cleaned)].copy()
 
+    # add relative speed column based on the finish time
+    foo = 1
+    df_merged["relative_speed"] = df_merged.apply(lambda x: (x["running_speed_ms"]/x["avg_speed_m_s"] * 100), axis=1)
+
     save_merged_dataframe(df_merged)
     # save_cleaned_demographics_data(df_demo_cleaned)

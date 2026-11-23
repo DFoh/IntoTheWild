@@ -8,7 +8,7 @@ import pandas as pd
 import seaborn as sns
 from scipy.io import loadmat
 
-from analysis.util import make_file_path, safe_result_dataframe, load_path_root, \
+from analysis.util import make_file_path, safe_result_dataframe, load_path_track_grand_prix, \
     load_merged_dataframe
 
 # For debugging in PyCharm:
@@ -27,7 +27,7 @@ def plot_knee_flexion_over_laps_subject_wise(df: pd.DataFrame):
     # sns.lineplot(data=df, x="Lap", y=column_name, hue="Heat", markers=False)
     # sns.lineplot(data=df, x="Lap", y=column_name, hue="Heat", units="Bib", estimator=None)
     # plt.show()
-    path_plot = load_path_root() / "kinematics" / "plots" / "max_knee_flexion_over_laps"
+    path_plot = load_path_track_grand_prix() / "kinematics" / "plots" / "max_knee_flexion_over_laps"
     path_plot.mkdir(parents=True, exist_ok=True)
     bibs = df["Bib"].unique()
     for bib in bibs:
@@ -42,7 +42,7 @@ def plot_knee_flexion_over_laps_subject_wise(df: pd.DataFrame):
 
 
 def data_check(df_events: pd.DataFrame):
-    path_mat_root = load_path_root() / "kinematics" / "mat"
+    path_mat_root = load_path_track_grand_prix() / "kinematics" / "mat"
 
     rows = []
     for index, row in df_events.iterrows():
@@ -81,7 +81,7 @@ def data_check(df_events: pd.DataFrame):
 
 
 def plot_limb_lengths_over_laps(df):
-    path_plot = load_path_root() / "kinematics" / "plots" / "limb_lengths"
+    path_plot = load_path_track_grand_prix() / "kinematics" / "plots" / "limb_lengths"
     path_plot.mkdir(parents=True, exist_ok=True)
     bibs = df["Bib"].unique()
     for bib in bibs:
@@ -106,7 +106,7 @@ def plot_limb_lengths_over_laps(df):
 
 
 def plot_parameter_over_laps(df, parameter_name, y_label):
-    path_plot = load_path_root() / "kinematics" / "plots" / "parameters_over_laps"
+    path_plot = load_path_track_grand_prix() / "kinematics" / "plots" / "parameters_over_laps"
     path_plot.mkdir(parents=True, exist_ok=True)
     # average for each lap and bib for left and right side
 
@@ -122,7 +122,7 @@ def plot_parameter_over_laps(df, parameter_name, y_label):
 
 
 def plot_parameter_over_laps_heat_split(df, parameter_name, y_label):
-    path_plot = load_path_root() / "kinematics" / "plots" / "parameters_over_laps_heat_split"
+    path_plot = load_path_track_grand_prix() / "kinematics" / "plots" / "parameters_over_laps_heat_split"
     path_plot.mkdir(parents=True, exist_ok=True)
     # average for each lap and bib for left and right side
     plt.close()
@@ -162,7 +162,7 @@ def plot_parameter_over_laps_heat_split(df, parameter_name, y_label):
 
 
 def plot_parameter_over_laps_subject_wise(df, parameter_name, y_label):
-    path_plot = load_path_root() / "kinematics" / "plots" / "parameters_over_laps_subject_wise"
+    path_plot = load_path_track_grand_prix() / "kinematics" / "plots" / "parameters_over_laps_subject_wise"
     path_plot.mkdir(parents=True, exist_ok=True)
     # average for each lap and bib for left and right side
     bibs = df["Bib"].unique()
@@ -181,7 +181,7 @@ def plot_parameter_over_laps_subject_wise(df, parameter_name, y_label):
 
 
 def plot_parameter_over_laps_heat_wise(df, parameter_name, y_label):
-    path_plot = load_path_root() / "kinematics" / "plots" / "parameters_over_laps_heat_wise"
+    path_plot = load_path_track_grand_prix() / "kinematics" / "plots" / "parameters_over_laps_heat_wise"
     path_plot.mkdir(parents=True, exist_ok=True)
     heats = df["Heat"].unique()
     df = df.groupby(["Heat", "Bib", "Lap"]).mean(numeric_only=True).reset_index()
@@ -232,8 +232,8 @@ def main():
 
 
 def plot_raw_data_subject_wise(df_events: pd.DataFrame):
-    path_mat_root = load_path_root() / "kinematics" / "mat"
-    path_plot = load_path_root() / "kinematics" / "plots" / "raw_data_subject_wise"
+    path_mat_root = load_path_track_grand_prix() / "kinematics" / "mat"
+    path_plot = load_path_track_grand_prix() / "kinematics" / "plots" / "raw_data_subject_wise"
     path_plot.mkdir(parents=True, exist_ok=True)
 
     for index, row in df_events.iterrows():

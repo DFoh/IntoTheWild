@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from analysis.util import load_path_root
+from analysis.util import load_path_track_grand_prix
 
 
 def get_video_fps(path_video: Path) -> float:
@@ -34,7 +34,7 @@ def main(heat: int, bib_no: int, overwrite_existing: bool = False):
     path_prefs_file = Path("E:/QTM_Projects/IntoTheWild/prefs.pxt")
 
     # path_matching_excel = Path(r"E:\QTM_Projects\IntoTheWild\Bib_Frame_Matching.xlsx")
-    path_matching_excel = load_path_root() / "Bib_Frame_Matching.xlsx"
+    path_matching_excel = load_path_track_grand_prix() / "Bib_Frame_Matching.xlsx"
 
 
     df_matching = pd.read_excel(path_matching_excel, sheet_name=sheet_name)

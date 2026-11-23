@@ -10,7 +10,7 @@ from labtools.batch_processor import BatchProcessor
 from scipy.io import loadmat
 from scipy.signal import find_peaks
 
-from analysis.util import load_path_root
+from analysis.util import load_path_track_grand_prix
 
 PATH_ROOT_WIN = r"C:\Users\dominik.fohrmann\OneDrive - MSH Medical School Hamburg - University of Applied Sciences and Medical University\Dokumente\Projects\IntoTheWild\data\TrackGrandPrix"
 # for macOS:
@@ -305,7 +305,7 @@ def make_pelvis_com_plots(
 
 
 if __name__ == '__main__':
-    path_root = load_path_root()
+    path_root = load_path_track_grand_prix()
     path_mat_root = Path(path_root) / "TrackGrandPrix" / "kinematics" / "mat"
     bp = BatchProcessor(path_mat_root,
                         level_names=["Bib", "Lap"],

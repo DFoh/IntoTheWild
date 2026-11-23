@@ -9,7 +9,7 @@ import pandas as pd
 from labtools.batch_processor import BatchProcessor
 from scipy.io import loadmat
 
-from analysis.util import load_path_root, safe_result_dataframe, load_result_dataframe, safe_event_dataframe, \
+from analysis.util import load_path_track_grand_prix, safe_result_dataframe, load_result_dataframe, safe_event_dataframe, \
     load_events_from_excel, load_cleaned_demographics_data, get_participant_data
 from gait_events import get_running_events
 
@@ -502,7 +502,7 @@ def calc_kinematic_params(
     #
     plt.close()
 
-    path_plot = load_path_root() / "kinematics" / "plots" / "knee_flexion_angles_raw"
+    path_plot = load_path_track_grand_prix() / "kinematics" / "plots" / "knee_flexion_angles_raw"
     fig, ax = plt.subplots()
     for side, col in zip(["Left", "Right"], ["red", "blue"]):
         knee_flexion = data[f'{side}_Knee_Angles'][0][0][:, 0]
@@ -625,7 +625,10 @@ def make_strides(events: dict) -> list:
             strides.append((ic, to, cl_ic, cl_to, next_ic, side))
     return strides
 
+
 STRIDE_COUNTER = 0
+
+
 def events_processor(row: pd.Series, df_demographics: pd.DataFrame) -> dict | None:
     global STRIDE_COUNTER
     if not {"Bib", "Lap", "path"}.issubset(row.index):
@@ -680,18 +683,17 @@ def events_processor(row: pd.Series, df_demographics: pd.DataFrame) -> dict | No
         stride_durations.append(next_ic - ic)
         # plt.axvline(x=next_ic, color=cols[side], linestyle="--")
 
-
     # leave one out modified z-score method according to Iglewicz and Hoaglin (1993) "How to Detect and Handle Outliers" (ASQC Basic References in Quality Control: Statistical Techniques, Vol. 16)
     # plus 2 frame plausibility check (e.g. if stride frames are 51, 51, 51, 51, 51, 50, the last one should not be flagged as an outlier, even though after the modified z-score calculation it would be)
     # criterion 1:
     med_duration = np.median(stride_durations)
-    abs_diffs = np.abs(np.array(stride_durations)- med_duration)
+    abs_diffs = np.abs(np.array(stride_durations) - med_duration)
     outlier_indices_1 = np.where(abs_diffs > 4.0)[0]
     # todo: consider skipping next if no outlier here...
     # criterion 2
     mod_z_scores = []
     for s in range(len(stride_durations)):
-        stride_durations_loo = stride_durations[:s] + stride_durations[s+1:]
+        stride_durations_loo = stride_durations[:s] + stride_durations[s + 1:]
         median_stride_duration = np.median(stride_durations_loo)
         mad = np.median(np.abs(np.array(stride_durations_loo) - median_stride_duration))
         if mad < 1E-9:
@@ -712,7 +714,7 @@ def events_processor(row: pd.Series, df_demographics: pd.DataFrame) -> dict | No
         print(f"Outliers found at indices: {outlier_indices} with stride durations: {[stride_durations[i] for i in outlier_indices]}")
         plt.suptitle(f"Outliers found at indices: {outlier_indices} with stride durations: {[stride_durations[i] for i in outlier_indices]}")
 
-    path_plot = load_path_root() / "kinematics" / "plots" / "step_detection" /  "pelvis_com_vert"
+    path_plot = load_path_track_grand_prix() / "kinematics" / "plots" / "step_detection" / "pelvis_com_vert"
     filename = f"pelvis_com_vert_{bib}_{lap}.png"
     if outliers_found:
         filename = "error_" + filename
@@ -733,6 +735,7 @@ def events_processor(row: pd.Series, df_demographics: pd.DataFrame) -> dict | No
         plt.savefig(path_plot / filename)
 
     return events
+
 
 frame_range_adjustments = [
     # (bib_no, lap, start_frame, end_frame)
@@ -773,10 +776,10 @@ def remove_outliers(df: pd.DataFrame, z_thresh: float = 3.0) -> pd.DataFrame:
     return df
 
 
-if __name__ == '__main__':
+def analyze_track_data():
     recalc_events = True
     recalc_kinematics = False
-    path_root = load_path_root()
+    path_root = load_path_track_grand_prix()
     path_kinematics = Path(path_root) / "kinematics"
     path_mat_root = path_kinematics / "mat"
     bp = BatchProcessor(path_mat_root,
@@ -874,3 +877,7 @@ if __name__ == '__main__':
     long = long.stack("side").reset_index()
     long.columns.name = None
     safe_result_dataframe(long, "kinematic_params_long.xlsx")
+
+
+if __name__ == '__main__':
+    analyze_track_data()

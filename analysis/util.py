@@ -6,6 +6,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 
+
 def load_path_root() -> Path:
     import os
     load_dotenv()
@@ -19,9 +20,15 @@ def load_path_root() -> Path:
         raise ValueError("PATH_ROOT not found. Check your .env file and try again.")
     return Path(p)
 
+def load_path_track_grand_prix() -> Path:
+    return load_path_root() / "TrackGrandPrix"
+
+
+def load_path_lab_data() -> Path:
+    return load_path_root() / "lab"
 
 def get_result_frame_path(filename: str) -> Path:
-    path_root = load_path_root()
+    path_root = load_path_track_grand_prix()
     path_safe = Path(path_root) / "kinematics" / filename
     return path_safe
 
@@ -74,7 +81,7 @@ def load_events_from_excel() -> pd.DataFrame:
 
 
 def load_demographics_raw_data():
-    path_root = load_path_root()
+    path_root = load_path_track_grand_prix()
     path_demo = Path(path_root) / "demographics.xlsx"
     if not path_demo.exists():
         raise FileNotFoundError(f"File {path_demo} not found")
@@ -88,7 +95,7 @@ def load_demographics_raw_data():
 
 
 def save_merged_dataframe(df_merged: pd.DataFrame):
-    path_root = load_path_root()
+    path_root = load_path_track_grand_prix()
 
     path_merged = Path(path_root) / "merged_data.xlsx"
     try:
@@ -99,7 +106,7 @@ def save_merged_dataframe(df_merged: pd.DataFrame):
 
 
 def load_merged_dataframe() -> pd.DataFrame:
-    path_root = load_path_root()
+    path_root = load_path_track_grand_prix()
     path_merged = Path(path_root) / "merged_data.xlsx"
     if not path_merged.exists():
         raise FileNotFoundError(f"File {path_merged} not found")
@@ -109,7 +116,7 @@ def load_merged_dataframe() -> pd.DataFrame:
 
 
 def save_cleaned_demographics_data(df_demo: pd.DataFrame):
-    path_root = load_path_root()
+    path_root = load_path_track_grand_prix()
     path_demo_cleaned = Path(path_root) / "demographics_cleaned.xlsx"
     try:
         df_demo.to_excel(path_demo_cleaned, index=False)
@@ -119,7 +126,7 @@ def save_cleaned_demographics_data(df_demo: pd.DataFrame):
 
 
 def load_cleaned_demographics_data() -> pd.DataFrame:
-    path_root = load_path_root()
+    path_root = load_path_track_grand_prix()
     path_demo_cleaned = Path(path_root) / "demographics_cleaned.xlsx"
     if not path_demo_cleaned.exists():
         raise FileNotFoundError(f"File {path_demo_cleaned} not found")
@@ -141,7 +148,7 @@ def make_file_path(path_mat_root: Path, heat: str, bib_number: int, lap_no: int)
 
 
 def get_participant_data() -> pd.DataFrame:
-    path_root = load_path_root()
+    path_root = load_path_track_grand_prix()
     path_participant_data = path_root / "into_the_wild_participant_data.xlsx"
     df_demo = pd.read_excel(path_participant_data)
     # drop start_number == NaN rows
